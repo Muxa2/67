@@ -179,32 +179,9 @@ function countLines(node: TextNode): number {
   return Math.max(1, Math.round(node.height / lhPx));
 }
 
-// Оборачивает placeholder в прозрачный фрейм точного размера исходного
-// текстового узла, чтобы footprint (высота + расстояния) сохранялись 1:1.
-function wrapInFootprint(
-  inner: SceneNode,
-  srcW: number,
-  srcH: number,
-  name: string,
-): FrameNode {
-  const fw = Math.max(srcW, 0.01);
-  const fh = Math.max(srcH, 0.01);
-  const frame = figma.createFrame();
-  frame.name = name;
-  frame.resize(fw, fh);
-  frame.fills = [];
-  frame.clipsContent = false;
-  frame.appendChild(inner);
-  // Центрируем по вертикали; по горизонтали — прижато к левому краю.
-  inner.x = 0;
-  inner.y = Math.max(0, (fh - inner.height) / 2);
-  return frame;
-}
-
 async function buildText(node: TextNode, platform: Platform): Promise<SceneNode> {
   const kind = await getTextKind(node);
   const w = Math.max(node.width, 0.01);
-  const srcH = Math.max(node.height, 0.01);
   const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
 
   // Large / Small — одна полоса
@@ -215,10 +192,6 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
     rect.resize(w, bh);
     rect.cornerRadius = 16;
     rect.fills = [fill];
-    // Если полоса ниже исходника, оборачиваем чтобы сохранить footprint.
-    if (bh < srcH - 0.5) {
-      return wrapInFootprint(rect, w, srcH, rect.name);
-    }
     return rect;
   }
 
@@ -233,20 +206,17 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
     rect.resize(w, bh);
     rect.cornerRadius = 16;
     rect.fills = [fill];
-    if (bh < srcH - 0.5) {
-      return wrapInFootprint(rect, w, srcH, rect.name);
-    }
     return rect;
   }
 
   const barCount = Math.min(lines, 3);
   const totalH = barCount * bh + (barCount - 1) * gap;
 
-  const inner = figma.createFrame();
-  inner.name = `Skeleton/Content/Text-Paragraph-${barCount}L`;
-  inner.resize(w, Math.max(totalH, 0.01));
-  inner.fills = [];
-  inner.clipsContent = false;
+  const frame = figma.createFrame();
+  frame.name = `Skeleton/Content/Text-Paragraph-${barCount}L`;
+  frame.resize(w, Math.max(totalH, 0.01));
+  frame.fills = [];
+  frame.clipsContent = false;
 
   for (let i = 0; i < barCount; i++) {
     const bar = figma.createRectangle();
@@ -260,15 +230,11 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
     bar.resize(Math.max(barW, 0.01), bh);
     bar.cornerRadius = 16;
     bar.fills = [fill];
-    inner.appendChild(bar);
+    frame.appendChild(bar);
     bar.x = 0;
     bar.y = i * (bh + gap);
   }
-
-  if (totalH < srcH - 0.5) {
-    return wrapInFootprint(inner, w, srcH, inner.name);
-  }
-  return inner;
+  return frame;
 }
 
 // ============================================================
@@ -301,10 +267,12 @@ async function buildLeaf(node: SceneNode, platform: Platform): Promise<SceneNode
     return buildIconCircle(node.width, node.height);
   }
 
-  // RECTANGLE / прочий лист — размер 1:1, цвет по роли
+  // RECTANGLE / прочий лист — размер 1:1.
+  // Surface (1F1F1F) если у исходника есть видимая заливка (это карточка/кнопка/инпут как лист).
+  // Content (292929) если заливки нет (разделитель, линия, мелкая деталь).
   const rect = figma.createRectangle();
   rect.resize(w, h);
-  const isSurface = w >= 80 || h >= 32;
+  const isSurface = hasVisibleFill(node);
   rect.name = isSurface ? "Skeleton/Surface" : "Skeleton/Content/Detail";
   rect.fills = [{ type: "SOLID", color: isSurface ? C_SURFACE : C_CONTENT }];
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") {

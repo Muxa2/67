@@ -111,24 +111,9 @@ function countLines(node) {
     return Math.max(1, Math.round(node.height / lhPx));
 }
 
-function wrapInFootprint(inner, srcW, srcH, name) {
-    const fw = Math.max(srcW, 0.01);
-    const fh = Math.max(srcH, 0.01);
-    const frame = figma.createFrame();
-    frame.name = name;
-    frame.resize(fw, fh);
-    frame.fills = [];
-    frame.clipsContent = false;
-    frame.appendChild(inner);
-    inner.x = 0;
-    inner.y = Math.max(0, (fh - inner.height) / 2);
-    return frame;
-}
-
 async function buildText(node, platform) {
     const kind = await getTextKind(node);
     const w = Math.max(node.width, 0.01);
-    const srcH = Math.max(node.height, 0.01);
     const fill = { type: "SOLID", color: C_CONTENT };
 
     if (kind === "Large" || kind === "Small") {
@@ -138,9 +123,6 @@ async function buildText(node, platform) {
         rect.resize(w, bh);
         rect.cornerRadius = 16;
         rect.fills = [fill];
-        if (bh < srcH - 0.5) {
-            return wrapInFootprint(rect, w, srcH, rect.name);
-        }
         return rect;
     }
 
@@ -154,20 +136,17 @@ async function buildText(node, platform) {
         rect.resize(w, bh);
         rect.cornerRadius = 16;
         rect.fills = [fill];
-        if (bh < srcH - 0.5) {
-            return wrapInFootprint(rect, w, srcH, rect.name);
-        }
         return rect;
     }
 
     const barCount = Math.min(lines, 3);
     const totalH = barCount * bh + (barCount - 1) * gap;
 
-    const inner = figma.createFrame();
-    inner.name = `Skeleton/Content/Text-Paragraph-${barCount}L`;
-    inner.resize(w, Math.max(totalH, 0.01));
-    inner.fills = [];
-    inner.clipsContent = false;
+    const frame = figma.createFrame();
+    frame.name = `Skeleton/Content/Text-Paragraph-${barCount}L`;
+    frame.resize(w, Math.max(totalH, 0.01));
+    frame.fills = [];
+    frame.clipsContent = false;
 
     for (let i = 0; i < barCount; i++) {
         const bar = figma.createRectangle();
@@ -181,15 +160,11 @@ async function buildText(node, platform) {
         bar.resize(Math.max(barW, 0.01), bh);
         bar.cornerRadius = 16;
         bar.fills = [fill];
-        inner.appendChild(bar);
+        frame.appendChild(bar);
         bar.x = 0;
         bar.y = i * (bh + gap);
     }
-
-    if (totalH < srcH - 0.5) {
-        return wrapInFootprint(inner, w, srcH, inner.name);
-    }
-    return inner;
+    return frame;
 }
 
 // ---------- LEAF ----------
@@ -217,7 +192,7 @@ async function buildLeaf(node, platform) {
 
     const rect = figma.createRectangle();
     rect.resize(w, h);
-    const isSurface = w >= 80 || h >= 32;
+    const isSurface = hasVisibleFill(node);
     rect.name = isSurface ? "Skeleton/Surface" : "Skeleton/Content/Detail";
     rect.fills = [{ type: "SOLID", color: isSurface ? C_SURFACE : C_CONTENT }];
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
