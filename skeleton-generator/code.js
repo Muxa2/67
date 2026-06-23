@@ -9,12 +9,13 @@ const C_SURFACE = hex("#1F1F1F");
 const C_CONTENT = hex("#292929");
 const C_STROKE  = hex("#333333");
 
-const ICON_SIZES = [12, 16, 20, 24, 32];
+const ICON_SIZES     = [12, 16, 20, 24, 32];
 const ICON_SCALE_MAX = 32;
 
+// Любая видимая заливка (включая IMAGE) → узел считается Surface.
 function hasVisibleFill(node) {
     if (!("fills" in node) || !Array.isArray(node.fills)) return false;
-    return node.fills.some((f) => f.visible !== false && f.type !== "IMAGE");
+    return node.fills.some((f) => f.visible !== false);
 }
 function hasStroke(node) {
     return "strokes" in node && Array.isArray(node.strokes) && node.strokes.length > 0;
@@ -40,24 +41,22 @@ function detectPlatform(rootWidth) {
 
 // ---------- ICON ----------
 function buildIconCircle(srcW, srcH) {
-    const w = Math.max(srcW, 0.01);
-    const h = Math.max(srcH, 0.01);
+    const w    = Math.max(srcW, 0.01);
+    const h    = Math.max(srcH, 0.01);
     const size = snapIconSize(Math.max(w, h));
 
     const circle = figma.createRectangle();
-    circle.name = "Skeleton/Content/Icon";
+    circle.name         = "Skeleton/Content/Icon";
     circle.resize(size, size);
     circle.cornerRadius = 999;
-    circle.fills = [{ type: "SOLID", color: C_CONTENT }];
+    circle.fills        = [{ type: "SOLID", color: C_CONTENT }];
 
-    if (Math.abs(size - w) < 0.5 && Math.abs(size - h) < 0.5) {
-        return circle;
-    }
+    if (Math.abs(size - w) < 0.5 && Math.abs(size - h) < 0.5) return circle;
 
     const frame = figma.createFrame();
-    frame.name = "Skeleton/Content/Icon";
+    frame.name         = "Skeleton/Content/Icon";
     frame.resize(w, h);
-    frame.fills = [];
+    frame.fills        = [];
     frame.clipsContent = false;
     frame.appendChild(circle);
     circle.x = (w - size) / 2;
@@ -69,8 +68,7 @@ function isIconScaleContainer(node) {
     if (!("children" in node) || node.children.length === 0) return false;
     if (Math.max(node.width, node.height) > ICON_SCALE_MAX) return false;
     if (hasVisibleFill(node)) return false;
-    const texts = node.findAll((n) => n.type === "TEXT");
-    return texts.length === 0;
+    return node.findAll((n) => n.type === "TEXT").length === 0;
 }
 
 // ---------- TEXT ----------
@@ -96,16 +94,16 @@ async function getTextKind(node) {
     const fontSize = typeof node.fontSize === "number" ? node.fontSize : 14;
     return fontSize >= 20 ? "Large" : "Small";
 }
-function smallBarH(platform) { return platform === "Desktop" ? 12 : 8; }
-function largeBarH(platform) { return platform === "Desktop" ? 16 : 12; }
-function barGap(platform)    { return platform === "Desktop" ? 4 : 2; }
+function smallBarH(p) { return p === "Desktop" ? 12 : 8; }
+function largeBarH(p) { return p === "Desktop" ? 16 : 12; }
+function barGap(p)    { return p === "Desktop" ? 4  : 2; }
 
 function countLines(node) {
     const fontSize = typeof node.fontSize === "number" ? node.fontSize : 14;
     let lhPx = fontSize * 1.3;
     const lh = node.lineHeight;
     if (typeof lh === "object" && "unit" in lh) {
-        if (lh.unit === "PIXELS") lhPx = lh.value;
+        if (lh.unit === "PIXELS")       lhPx = lh.value;
         else if (lh.unit === "PERCENT") lhPx = fontSize * (lh.value / 100);
     }
     return Math.max(1, Math.round(node.height / lhPx));
@@ -113,53 +111,49 @@ function countLines(node) {
 
 async function buildText(node, platform) {
     const kind = await getTextKind(node);
-    const w = Math.max(node.width, 0.01);
+    const w    = Math.max(node.width, 0.01);
     const fill = { type: "SOLID", color: C_CONTENT };
 
     if (kind === "Large" || kind === "Small") {
-        const bh = kind === "Large" ? largeBarH(platform) : smallBarH(platform);
+        const bh   = kind === "Large" ? largeBarH(platform) : smallBarH(platform);
         const rect = figma.createRectangle();
-        rect.name = `Skeleton/Content/Text-${kind}`;
+        rect.name         = `Skeleton/Content/Text-${kind}`;
         rect.resize(w, bh);
         rect.cornerRadius = 16;
-        rect.fills = [fill];
+        rect.fills        = [fill];
         return rect;
     }
 
-    const lines = countLines(node);
-    const bh = smallBarH(platform);
-    const gap = barGap(platform);
+    const lines    = countLines(node);
+    const bh       = smallBarH(platform);
+    const gap      = barGap(platform);
 
     if (lines <= 1) {
         const rect = figma.createRectangle();
-        rect.name = "Skeleton/Content/Text-Paragraph-1L";
+        rect.name         = "Skeleton/Content/Text-Paragraph-1L";
         rect.resize(w, bh);
         rect.cornerRadius = 16;
-        rect.fills = [fill];
+        rect.fills        = [fill];
         return rect;
     }
 
     const barCount = Math.min(lines, 3);
-    const totalH = barCount * bh + (barCount - 1) * gap;
-
-    const frame = figma.createFrame();
-    frame.name = `Skeleton/Content/Text-Paragraph-${barCount}L`;
+    const totalH   = barCount * bh + (barCount - 1) * gap;
+    const frame    = figma.createFrame();
+    frame.name         = `Skeleton/Content/Text-Paragraph-${barCount}L`;
     frame.resize(w, Math.max(totalH, 0.01));
-    frame.fills = [];
+    frame.fills        = [];
     frame.clipsContent = false;
 
     for (let i = 0; i < barCount; i++) {
-        const bar = figma.createRectangle();
-        bar.name = "Skeleton/Content/Line";
-        let barW;
-        if (barCount === 2) {
-            barW = i === 1 ? w * 0.58 : w;
-        } else {
-            barW = i === 2 ? w * 0.58 * 0.58 : w;
-        }
+        const bar  = figma.createRectangle();
+        bar.name   = "Skeleton/Content/Line";
+        const barW = barCount === 2
+            ? (i === 1 ? w * 0.58 : w)
+            : (i === 2 ? w * 0.58 * 0.58 : w);
         bar.resize(Math.max(barW, 0.01), bh);
         bar.cornerRadius = 16;
-        bar.fills = [fill];
+        bar.fills        = [fill];
         frame.appendChild(bar);
         bar.x = 0;
         bar.y = i * (bh + gap);
@@ -180,21 +174,22 @@ async function buildLeaf(node, platform) {
 
     if (node.type === "ELLIPSE") {
         if (Math.max(w, h) > ICON_SCALE_MAX) {
-            const rect = figma.createRectangle();
-            rect.name = "Skeleton/Content/Avatar";
+            const rect        = figma.createRectangle();
+            rect.name         = "Skeleton/Content/Avatar";
             rect.resize(w, h);
             rect.cornerRadius = 999;
-            rect.fills = [{ type: "SOLID", color: C_CONTENT }];
+            rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
             return rect;
         }
         return buildIconCircle(node.width, node.height);
     }
 
-    const rect = figma.createRectangle();
+    // RECTANGLE и прочие листья — точный размер 1:1.
+    const rect      = figma.createRectangle();
     rect.resize(w, h);
     const isSurface = hasVisibleFill(node);
-    rect.name = isSurface ? "Skeleton/Surface" : "Skeleton/Content/Detail";
-    rect.fills = [{ type: "SOLID", color: isSurface ? C_SURFACE : C_CONTENT }];
+    rect.name       = isSurface ? "Skeleton/Surface" : "Skeleton/Content/Detail";
+    rect.fills      = [{ type: "SOLID", color: isSurface ? C_SURFACE : C_CONTENT }];
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
         rect.cornerRadius = node.cornerRadius;
     }
@@ -204,24 +199,24 @@ async function buildLeaf(node, platform) {
 
 // ---------- RECURSION ----------
 async function build(node, platform) {
-    if (isIconScaleContainer(node)) {
-        return buildIconCircle(node.width, node.height);
-    }
+    if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
+
     if (!("children" in node) || node.children.length === 0) {
         return buildLeaf(node, platform);
     }
 
-    const src = node;
+    const src   = node;
     const frame = figma.createFrame();
     frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
 
     if (hasVisibleFill(node)) {
         frame.fills = [{ type: "SOLID", color: C_SURFACE }];
-        frame.name = "Skeleton/Surface/Container";
+        frame.name  = "Skeleton/Surface/Container";
     } else {
         frame.fills = [];
-        frame.name = "Skeleton/Container";
+        frame.name  = "Skeleton/Container";
     }
+
     if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
         frame.cornerRadius = src.cornerRadius;
     }
@@ -250,7 +245,7 @@ figma.ui.onmessage = async (msg) => {
     const placed = [];
     for (const source of selection) {
         const platform = detectPlatform(source.width);
-        const root = await build(source, platform);
+        const root     = await build(source, platform);
         figma.currentPage.appendChild(root);
         const box = source.absoluteBoundingBox;
         if (box) {
