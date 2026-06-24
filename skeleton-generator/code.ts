@@ -26,6 +26,7 @@ const NAME_BUTTON         = ["button"];
 const NAME_STATUS_BLOCK   = ["status-block", "status block", "statusblock"];
 const NAME_LOGO           = ["logo"];
 const NAME_STORIES        = ["stories"];
+const NAME_LINK           = ["link"];
 const NAME_CAT_BTN_SLIDER = ["category button slider"];
 const NAME_PLAY_WIN       = ["play & win", "play&win", "play and win"];
 
@@ -508,6 +509,33 @@ async function buildStoriesStackOff(node: SceneNode, platform: Platform): Promis
 }
 
 // ============================================================
+// LINK — text only, no icons
+// ============================================================
+
+async function buildLink(node: SceneNode, platform: Platform): Promise<FrameNode> {
+  const frame = figma.createFrame();
+  frame.name         = node.name;
+  frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  frame.fills        = [];
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
+  frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : true;
+  const hasAL = applyAutoLayout(frame, node);
+
+  if ("children" in node) {
+    for (const child of (node as ChildrenMixin).children) {
+      if (child.visible === false || isAbsolutePos(child)) continue;
+      if (child.type !== "TEXT") continue;
+      const built = await buildText(child as TextNode, platform);
+      if (!built) continue;
+      frame.appendChild(built);
+      if (hasAL) applyChildLayoutSizing(built, child);
+      else { built.x = child.x; built.y = child.y; }
+    }
+  }
+  return frame;
+}
+
+// ============================================================
 // CATEGORY BUTTON SLIDER
 // ============================================================
 
@@ -564,6 +592,7 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   if (nameIs(node, NAME_PAY_METHOD))     return buildPayMethod(node);
   if (nameIs(node, NAME_LOGO))           return buildLogo(node);
   if (nameIs(node, NAME_BUTTON))         return buildButton(node, platform);
+  if (nameIs(node, NAME_LINK))           return buildLink(node, platform);
   if (nameIs(node, NAME_STORIES))        return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
   if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node, platform);
 
