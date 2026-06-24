@@ -159,7 +159,7 @@ async function buildButton(node, platform) {
 
     if ("children" in node) {
         for (const child of node.children) {
-            if (child.visible === false) continue;
+            if (child.visible === false || isAbsolutePos(child)) continue;
             const built = await buildButtonContent(child, platform);
             if (!built) continue;
             frame.appendChild(built);
@@ -172,6 +172,7 @@ async function buildButton(node, platform) {
 
 async function buildButtonContent(node, platform) {
     if (node.visible === false) return null;
+    if (isAbsolutePos(node)) return null;
     if (node.type === "TEXT") return buildText(node, platform);
     if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE")
         return buildIconCircle(node.width, node.height, node.name);
@@ -185,7 +186,7 @@ async function buildButtonContent(node, platform) {
         frame.clipsContent = "clipsContent" in node ? node.clipsContent : false;
         const hasAL = applyAutoLayout(frame, node);
         for (const child of node.children) {
-            if (child.visible === false) continue;
+            if (child.visible === false || isAbsolutePos(child)) continue;
             const built = await buildButtonContent(child, platform);
             if (!built) continue;
             frame.appendChild(built);
@@ -446,7 +447,7 @@ async function buildStoriesStackOff(node, platform) {
 
     if ("children" in node) {
         for (const child of node.children) {
-            if (child.visible === false) continue;
+            if (child.visible === false || isAbsolutePos(child)) continue;
             const built = await build(child, platform);
             if (!built) continue;
             frame.appendChild(built);
@@ -481,7 +482,7 @@ async function buildCatBtnSlider(node, platform) {
 
     if ("children" in node) {
         for (const child of node.children) {
-            if (child.visible === false) continue;
+            if (child.visible === false || isAbsolutePos(child)) continue;
             const isText = child.type === "TEXT";
             const isIcon = child.type === "VECTOR" || child.type === "STAR" || child.type === "LINE"
                         || child.type === "ELLIPSE" || isIconScaleContainer(child);
@@ -497,8 +498,13 @@ async function buildCatBtnSlider(node, platform) {
 }
 
 // ---------- RECURSION ----------
+function isAbsolutePos(node) {
+    return "layoutPositioning" in node && node.layoutPositioning === "ABSOLUTE";
+}
+
 async function build(node, platform) {
     if (node.visible === false) return null;
+    if (isAbsolutePos(node)) return null;
 
     if (nameIs(node, NAME_DIVIDER))        return buildDivider(node);
     if (nameIs(node, NAME_STATUS_BLOCK))   return buildStatusBlock(node);
@@ -530,7 +536,7 @@ async function build(node, platform) {
     const hasAL = applyAutoLayout(frame, src);
 
     for (const child of src.children) {
-        if (child.visible === false) continue;
+        if (child.visible === false || isAbsolutePos(child)) continue;
         const built = await build(child, platform);
         if (built === null) continue;
         frame.appendChild(built);

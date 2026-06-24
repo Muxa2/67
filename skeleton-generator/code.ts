@@ -34,6 +34,10 @@ function nameIs(node: SceneNode, keywords: string[]): boolean {
   return keywords.some((k) => n.includes(k));
 }
 
+function isAbsolutePos(node: SceneNode): boolean {
+  return "layoutPositioning" in node && (node as any).layoutPositioning === "ABSOLUTE";
+}
+
 // ============================================================
 // FILL HELPERS
 // ============================================================
@@ -180,6 +184,7 @@ function buildPayMethod(node: SceneNode): FrameNode {
 
 async function buildButtonContent(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
   if (node.visible === false) return null;
+  if (isAbsolutePos(node)) return null;
   if (node.type === "TEXT") return buildText(node as TextNode, platform);
   if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE")
     return buildIconCircle(node.width, node.height, node.name);
@@ -193,7 +198,7 @@ async function buildButtonContent(node: SceneNode, platform: Platform): Promise<
     frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : false;
     const hasAL = applyAutoLayout(frame, node);
     for (const child of (node as ChildrenMixin).children) {
-      if (child.visible === false) continue;
+      if (child.visible === false || isAbsolutePos(child)) continue;
       const built = await buildButtonContent(child, platform);
       if (!built) continue;
       frame.appendChild(built);
@@ -221,7 +226,7 @@ async function buildButton(node: SceneNode, platform: Platform): Promise<FrameNo
   const hasAL = applyAutoLayout(frame, node);
   if ("children" in node) {
     for (const child of (node as ChildrenMixin).children) {
-      if (child.visible === false) continue;
+      if (child.visible === false || isAbsolutePos(child)) continue;
       const built = await buildButtonContent(child, platform);
       if (!built) continue;
       frame.appendChild(built);
@@ -491,7 +496,7 @@ async function buildStoriesStackOff(node: SceneNode, platform: Platform): Promis
 
   if ("children" in node) {
     for (const child of (node as ChildrenMixin).children) {
-      if (child.visible === false) continue;
+      if (child.visible === false || isAbsolutePos(child)) continue;
       const built = await build(child, platform);
       if (!built) continue;
       frame.appendChild(built);
@@ -529,7 +534,7 @@ async function buildCatBtnSlider(node: SceneNode, platform: Platform): Promise<F
 
   if ("children" in node) {
     for (const child of (node as ChildrenMixin).children) {
-      if (child.visible === false) continue;
+      if (child.visible === false || isAbsolutePos(child)) continue;
       const isText = child.type === "TEXT";
       const isIcon = child.type === "VECTOR" || child.type === "STAR" || child.type === "LINE"
                   || child.type === "ELLIPSE" || isIconScaleContainer(child);
@@ -551,6 +556,7 @@ async function buildCatBtnSlider(node: SceneNode, platform: Platform): Promise<F
 
 async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
   if (node.visible === false) return null;
+  if (isAbsolutePos(node)) return null;
 
   if (nameIs(node, NAME_DIVIDER))        return buildDivider(node);
   if (nameIs(node, NAME_STATUS_BLOCK))   return buildStatusBlock(node);
@@ -583,7 +589,7 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   const hasAL = applyAutoLayout(frame, src);
 
   for (const child of src.children) {
-    if (child.visible === false) continue;
+    if (child.visible === false || isAbsolutePos(child)) continue;
     const built = await build(child, platform);
     if (built === null) continue;
     frame.appendChild(built);
