@@ -37,9 +37,12 @@ const ICON_SCALE_MAX = 32;
 // NAME MATCHING
 // ============================================================
 
-const NAME_DIVIDER    = ["divider", "дивайдер", "separator", "dividers"];
-const NAME_LOGO_BADGE = ["logo badge", "logo-badge", "logobadge"];
-const NAME_PAY_METHOD = ["pay method logo", "pay-method-logo", "payment logo", "pay method"];
+const NAME_DIVIDER      = ["divider", "дивайдер", "separator", "dividers"];
+const NAME_LOGO_BADGE   = ["logo badge", "logo-badge", "logobadge"];
+const NAME_PAY_METHOD   = ["pay method logo", "pay-method-logo", "payment logo", "pay method"];
+const NAME_BUTTON       = ["button"];
+const NAME_STATUS_BLOCK = ["status-block", "status block", "statusblock"];
+const NAME_LOGO         = ["logo"];
 
 function nameIs(node: SceneNode, keywords: string[]): boolean {
   const n = node.name.toLowerCase();
@@ -148,6 +151,81 @@ function buildPayMethod(node: SceneNode): FrameNode {
   }
   frame.clipsContent = false;
   return frame;
+}
+
+async function buildButtonContent(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
+  if (node.visible === false) return null;
+  if (node.type === "TEXT") return buildText(node as TextNode, platform);
+  if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE") {
+    return buildIconCircle(node.width, node.height);
+  }
+  if (node.type === "ELLIPSE" || isIconScaleContainer(node)) {
+    return buildIconCircle(node.width, node.height);
+  }
+  if ("children" in node && (node as ChildrenMixin).children.length > 0) {
+    const frame = figma.createFrame();
+    frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+    frame.fills        = [];
+    frame.clipsContent = false;
+    for (const child of (node as ChildrenMixin).children) {
+      if (child.visible === false) continue;
+      const built = await buildButtonContent(child, platform);
+      if (!built) continue;
+      frame.appendChild(built);
+      built.x = child.x;
+      built.y = child.y;
+    }
+    return frame;
+  }
+  const rect = figma.createRectangle();
+  rect.name         = "Skeleton/Content/Detail";
+  rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    rect.cornerRadius = node.cornerRadius;
+  }
+  return rect;
+}
+
+async function buildButton(node: SceneNode, platform: Platform): Promise<FrameNode> {
+  const frame = figma.createFrame();
+  frame.name         = "Skeleton/Button";
+  frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    frame.cornerRadius = node.cornerRadius;
+  }
+  if (hasStroke(node)) applyStroke(frame, node);
+  frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : true;
+  if ("children" in node) {
+    for (const child of (node as ChildrenMixin).children) {
+      if (child.visible === false) continue;
+      const built = await buildButtonContent(child, platform);
+      if (!built) continue;
+      frame.appendChild(built);
+      built.x = child.x;
+      built.y = child.y;
+    }
+  }
+  return frame;
+}
+
+function buildStatusBlock(node: SceneNode): RectangleNode {
+  const rect = figma.createRectangle();
+  rect.name         = "Skeleton/Status Block";
+  rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
+  rect.cornerRadius = 999;
+  return rect;
+}
+
+function buildLogo(node: SceneNode): RectangleNode {
+  const rect = figma.createRectangle();
+  rect.name         = "Skeleton/Logo";
+  rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
+  rect.cornerRadius = 16;
+  return rect;
 }
 
 // ============================================================
@@ -344,10 +422,13 @@ function detectPlatform(rootWidth: number): Platform {
 async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
   if (node.visible === false) return null;
 
-  // Специальные компоненты по имени — приоритет перед всем остальным
-  if (nameIs(node, NAME_DIVIDER))    return buildDivider(node);
-  if (nameIs(node, NAME_LOGO_BADGE)) return buildLogoBadge(node);
-  if (nameIs(node, NAME_PAY_METHOD)) return buildPayMethod(node);
+  // Специальные компоненты по имени (порядок важен: более специфичные — первыми)
+  if (nameIs(node, NAME_DIVIDER))      return buildDivider(node);
+  if (nameIs(node, NAME_STATUS_BLOCK)) return buildStatusBlock(node);
+  if (nameIs(node, NAME_LOGO_BADGE))   return buildLogoBadge(node);
+  if (nameIs(node, NAME_PAY_METHOD))   return buildPayMethod(node);
+  if (nameIs(node, NAME_LOGO))         return buildLogo(node);
+  if (nameIs(node, NAME_BUTTON))       return buildButton(node, platform);
 
   if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
 
