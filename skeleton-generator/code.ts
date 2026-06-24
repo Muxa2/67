@@ -43,7 +43,8 @@ const NAME_PAY_METHOD   = ["pay method logo", "pay-method-logo", "payment logo",
 const NAME_BUTTON       = ["button"];
 const NAME_STATUS_BLOCK    = ["status-block", "status block", "statusblock"];
 const NAME_LOGO            = ["logo"];
-const NAME_PRIMARY_BANNER  = ["primary banner"];
+const NAME_STORIES         = ["stories"];
+const NAME_BANNER_BLOCK    = ["banner-block"];
 const NAME_CAT_BTN_SLIDER  = ["category button slider"];
 const NAME_PLAY_WIN        = ["play & win", "play&win", "play and win"];
 
@@ -415,26 +416,92 @@ async function buildLeaf(node: SceneNode, platform: Platform): Promise<SceneNode
 }
 
 // ============================================================
-// CATEGORY BUTTON SLIDER — RANDOM GAME
+// STORIES
 // ============================================================
 
-function isRandomGame(node: SceneNode): boolean {
+function hasStackOn(node: SceneNode): boolean {
   const n = node.name.toLowerCase();
-  if (n.includes("random game") || n.includes("random")) return true;
+  if (n.includes("stack=on") || n.includes("stack on")) return true;
   if ("componentProperties" in node && (node as InstanceNode).componentProperties) {
     for (const key of Object.keys((node as InstanceNode).componentProperties)) {
-      const prop = (node as InstanceNode).componentProperties[key];
-      if (prop && typeof prop.value === "string" && prop.value.toLowerCase().includes("random")) return true;
+      if (key.toLowerCase().includes("stack")) {
+        const prop = (node as InstanceNode).componentProperties[key];
+        if (prop && typeof prop.value === "string" && prop.value.toLowerCase() === "on") return true;
+      }
     }
   }
   return false;
 }
 
-async function buildCatBtnRandom(node: SceneNode, platform: Platform): Promise<FrameNode> {
+function buildStoriesStackOn(node: SceneNode): FrameNode {
+  const w   = Math.max(node.width, 0.01);
+  const h   = Math.max(node.height, 0.01);
+  const off = 6;
+  const cr  = "cornerRadius" in node && typeof node.cornerRadius === "number" ? node.cornerRadius : 0;
+
+  const outer = figma.createFrame();
+  outer.name         = "Skeleton/Stories/Stack";
+  outer.resize(w + off * 2, h);
+  outer.fills        = [];
+  outer.clipsContent = false;
+
+  for (let i = 2; i >= 1; i--) {
+    const layer = figma.createRectangle();
+    layer.name         = "Skeleton/Stories/Layer";
+    layer.resize(w, h);
+    layer.fills        = [{ type: "SOLID", color: C_CONTENT }];
+    layer.cornerRadius = cr;
+    layer.x            = off * i;
+    layer.y            = 0;
+    outer.appendChild(layer);
+  }
+
+  const main = figma.createRectangle();
+  main.name         = "Skeleton/Stories/Main";
+  main.resize(w, h);
+  main.fills        = [{ type: "SOLID", color: C_SURFACE }];
+  main.cornerRadius = cr;
+  main.x            = 0;
+  main.y            = 0;
+  outer.appendChild(main);
+
+  return outer;
+}
+
+async function buildStoriesStackOff(node: SceneNode, platform: Platform): Promise<FrameNode> {
   const frame = figma.createFrame();
-  frame.name         = "Skeleton/Category Button Slider/Random";
+  frame.name         = "Skeleton/Stories";
   frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
-  frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
+  frame.fills        = [];
+  frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
+  frame.strokeWeight = 1;
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    frame.cornerRadius = node.cornerRadius;
+  }
+  frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : true;
+
+  if ("children" in node) {
+    for (const child of (node as ChildrenMixin).children) {
+      if (child.visible === false) continue;
+      const built = await build(child, platform);
+      if (!built) continue;
+      frame.appendChild(built);
+      built.x = child.x;
+      built.y = child.y;
+    }
+  }
+  return frame;
+}
+
+// ============================================================
+// CATEGORY BUTTON SLIDER — all variants: no fill, icon + text only
+// ============================================================
+
+async function buildCatBtnSlider(node: SceneNode, platform: Platform): Promise<FrameNode> {
+  const frame = figma.createFrame();
+  frame.name         = "Skeleton/Category Button Slider";
+  frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  frame.fills        = [];
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
     frame.cornerRadius = node.cornerRadius;
   }
@@ -474,9 +541,10 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   if (nameIs(node, NAME_STATUS_BLOCK)) return buildStatusBlock(node);
   if (nameIs(node, NAME_LOGO_BADGE))   return buildLogoBadge(node);
   if (nameIs(node, NAME_PAY_METHOD))   return buildPayMethod(node);
-  if (nameIs(node, NAME_LOGO))         return buildLogo(node);
-  if (nameIs(node, NAME_BUTTON))       return buildButton(node, platform);
-  if (nameIs(node, NAME_CAT_BTN_SLIDER) && isRandomGame(node)) return buildCatBtnRandom(node, platform);
+  if (nameIs(node, NAME_LOGO))           return buildLogo(node);
+  if (nameIs(node, NAME_BUTTON))         return buildButton(node, platform);
+  if (nameIs(node, NAME_STORIES))        return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
+  if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node, platform);
 
   if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
 
@@ -496,7 +564,7 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
     frame.cornerRadius = src.cornerRadius;
   }
-  if (hasStroke(node) || nameIs(node, NAME_PRIMARY_BANNER) || nameIs(node, NAME_PLAY_WIN)) {
+  if (hasStroke(node) || nameIs(node, NAME_BANNER_BLOCK) || nameIs(node, NAME_PLAY_WIN)) {
     applyStroke(frame, node);
   }
   frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;

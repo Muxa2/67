@@ -24,7 +24,8 @@ const NAME_PAY_METHOD   = ["pay method logo", "pay-method-logo", "payment logo",
 const NAME_BUTTON       = ["button"];
 const NAME_STATUS_BLOCK    = ["status-block", "status block", "statusblock"];
 const NAME_LOGO            = ["logo"];
-const NAME_PRIMARY_BANNER  = ["primary banner"];
+const NAME_STORIES         = ["stories"];
+const NAME_BANNER_BLOCK    = ["banner-block"];
 const NAME_CAT_BTN_SLIDER  = ["category button slider"];
 const NAME_PLAY_WIN        = ["play & win", "play&win", "play and win"];
 
@@ -381,24 +382,67 @@ async function buildLeaf(node, platform) {
     return rect;
 }
 
-// Category Button Slider Random Game: #1F1F1F fill, only icon + text → #292929.
-function isRandomGame(node) {
+// Stories: detect Stack=on via componentProperties or name.
+function hasStackOn(node) {
     const n = node.name.toLowerCase();
-    if (n.includes("random game") || n.includes("random")) return true;
+    if (n.includes("stack=on") || n.includes("stack on")) return true;
     if ("componentProperties" in node && node.componentProperties) {
         for (const key of Object.keys(node.componentProperties)) {
-            const prop = node.componentProperties[key];
-            if (prop && typeof prop.value === "string" && prop.value.toLowerCase().includes("random")) return true;
+            if (key.toLowerCase().includes("stack")) {
+                const prop = node.componentProperties[key];
+                if (prop && typeof prop.value === "string" && prop.value.toLowerCase() === "on") return true;
+            }
         }
     }
     return false;
 }
 
-async function buildCatBtnRandom(node, platform) {
+// Stories Stack=on: main card #1F1F1F + 2 offset layers #292929 behind (peeking at right).
+function buildStoriesStackOn(node) {
+    const w   = Math.max(node.width, 0.01);
+    const h   = Math.max(node.height, 0.01);
+    const off = 6; // px offset per layer
+    const cr  = "cornerRadius" in node && typeof node.cornerRadius === "number" ? node.cornerRadius : 0;
+
+    const outer = figma.createFrame();
+    outer.name         = "Skeleton/Stories/Stack";
+    outer.resize(w + off * 2, h);
+    outer.fills        = [];
+    outer.clipsContent = false;
+
+    // Stack layers (behind, appended first → rendered below main)
+    for (let i = 2; i >= 1; i--) {
+        const layer = figma.createRectangle();
+        layer.name         = "Skeleton/Stories/Layer";
+        layer.resize(w, h);
+        layer.fills        = [{ type: "SOLID", color: C_CONTENT }];
+        layer.cornerRadius = cr;
+        layer.x            = off * i;
+        layer.y            = 0;
+        outer.appendChild(layer);
+    }
+
+    // Main card (front)
+    const main = figma.createRectangle();
+    main.name         = "Skeleton/Stories/Main";
+    main.resize(w, h);
+    main.fills        = [{ type: "SOLID", color: C_SURFACE }];
+    main.cornerRadius = cr;
+    main.x            = 0;
+    main.y            = 0;
+    outer.appendChild(main);
+
+    return outer;
+}
+
+// Stories Stack=off: stroke #333333, no fill, recurse children normally.
+async function buildStoriesStackOff(node, platform) {
     const frame = figma.createFrame();
-    frame.name         = "Skeleton/Category Button Slider/Random";
+    frame.name         = "Skeleton/Stories";
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
-    frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
+    frame.fills        = [];
+    frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
+    frame.strokeWeight = 1;
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
         frame.cornerRadius = node.cornerRadius;
     }
@@ -407,7 +451,30 @@ async function buildCatBtnRandom(node, platform) {
     if ("children" in node) {
         for (const child of node.children) {
             if (child.visible === false) continue;
-            // Only render TEXT nodes and icon nodes (VECTOR/ELLIPSE/icon containers).
+            const built = await build(child, platform);
+            if (!built) continue;
+            frame.appendChild(built);
+            built.x = child.x;
+            built.y = child.y;
+        }
+    }
+    return frame;
+}
+
+// Category Button Slider (all variants): no fill, only icon + text → #292929.
+async function buildCatBtnSlider(node, platform) {
+    const frame = figma.createFrame();
+    frame.name         = "Skeleton/Category Button Slider";
+    frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+    frame.fills        = [];
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+        frame.cornerRadius = node.cornerRadius;
+    }
+    frame.clipsContent = "clipsContent" in node ? node.clipsContent : true;
+
+    if ("children" in node) {
+        for (const child of node.children) {
+            if (child.visible === false) continue;
             const isText = child.type === "TEXT";
             const isIcon = child.type === "VECTOR" || child.type === "STAR" || child.type === "LINE"
                         || child.type === "ELLIPSE" || isIconScaleContainer(child);
@@ -431,9 +498,10 @@ async function build(node, platform) {
     if (nameIs(node, NAME_STATUS_BLOCK)) return buildStatusBlock(node);
     if (nameIs(node, NAME_LOGO_BADGE))   return buildLogoBadge(node);
     if (nameIs(node, NAME_PAY_METHOD))   return buildPayMethod(node);
-    if (nameIs(node, NAME_LOGO))         return buildLogo(node);
-    if (nameIs(node, NAME_BUTTON))       return buildButton(node, platform);
-    if (nameIs(node, NAME_CAT_BTN_SLIDER) && isRandomGame(node)) return buildCatBtnRandom(node, platform);
+    if (nameIs(node, NAME_LOGO))          return buildLogo(node);
+    if (nameIs(node, NAME_BUTTON))        return buildButton(node, platform);
+    if (nameIs(node, NAME_STORIES))       return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
+    if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node, platform);
 
     if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
 
@@ -452,7 +520,7 @@ async function build(node, platform) {
     if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
         frame.cornerRadius = src.cornerRadius;
     }
-    if (hasStroke(node) || nameIs(node, NAME_PRIMARY_BANNER) || nameIs(node, NAME_PLAY_WIN)) {
+    if (hasStroke(node) || nameIs(node, NAME_BANNER_BLOCK) || nameIs(node, NAME_PLAY_WIN)) {
         applyStroke(frame, node);
     }
     frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
