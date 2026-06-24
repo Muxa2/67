@@ -44,7 +44,6 @@ const NAME_BUTTON       = ["button"];
 const NAME_STATUS_BLOCK    = ["status-block", "status block", "statusblock"];
 const NAME_LOGO            = ["logo"];
 const NAME_STORIES         = ["stories"];
-const NAME_BANNER_BLOCK    = ["banner-block"];
 const NAME_CAT_BTN_SLIDER  = ["category button slider"];
 const NAME_PLAY_WIN        = ["play & win", "play&win", "play and win"];
 
@@ -494,14 +493,27 @@ async function buildStoriesStackOff(node: SceneNode, platform: Platform): Promis
 }
 
 // ============================================================
-// CATEGORY BUTTON SLIDER — all variants: no fill, icon + text only
+// CATEGORY BUTTON SLIDER
 // ============================================================
 
+function isRandomGame(node: SceneNode): boolean {
+  const n = node.name.toLowerCase();
+  if (n.includes("random game") || n.includes("random")) return true;
+  if ("componentProperties" in node && (node as InstanceNode).componentProperties) {
+    for (const key of Object.keys((node as InstanceNode).componentProperties)) {
+      const prop = (node as InstanceNode).componentProperties[key];
+      if (prop && typeof prop.value === "string" && prop.value.toLowerCase().includes("random")) return true;
+    }
+  }
+  return false;
+}
+
+// Random Game → fill #1F1F1F; Other → no fill. Only icon + text rendered.
 async function buildCatBtnSlider(node: SceneNode, platform: Platform): Promise<FrameNode> {
   const frame = figma.createFrame();
   frame.name         = "Skeleton/Category Button Slider";
   frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
-  frame.fills        = [];
+  frame.fills        = isRandomGame(node) ? [{ type: "SOLID", color: C_SURFACE }] : [];
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
     frame.cornerRadius = node.cornerRadius;
   }
@@ -564,7 +576,7 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
     frame.cornerRadius = src.cornerRadius;
   }
-  if (hasStroke(node) || nameIs(node, NAME_BANNER_BLOCK) || nameIs(node, NAME_PLAY_WIN)) {
+  if (hasStroke(node) || nameIs(node, NAME_PLAY_WIN)) {
     applyStroke(frame, node);
   }
   frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
