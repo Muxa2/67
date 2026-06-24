@@ -152,26 +152,13 @@ function buildPayMethod(node) {
     return frame;
 }
 
-async function buildButton(node, platform) {
+function buildButton(node) {
     const frame = figma.createFrame();
     frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
-    if (hasStroke(node)) applyStroke(frame, node);
-    frame.clipsContent = "clipsContent" in node ? node.clipsContent : true;
-    const hasAL = applyAutoLayout(frame, node);
-
-    if ("children" in node) {
-        for (const child of node.children) {
-            if (child.visible === false || isAbsolutePos(child)) continue;
-            const built = await buildButtonContent(child, platform);
-            if (!built) continue;
-            frame.appendChild(built);
-            if (hasAL) applyChildLayoutSizing(built, child);
-            else { built.x = child.x; built.y = child.y; }
-        }
-    }
+    frame.clipsContent = false;
     return frame;
 }
 
@@ -515,7 +502,7 @@ async function build(node, platform) {
     if (nameIs(node, NAME_PAY_METHOD))     return buildPayMethod(node);
     if (nameIs(node, NAME_LOGO))           return buildLogo(node);
     if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node);
-    if (nameIs(node, NAME_BUTTON))         return buildButton(node, platform);
+    if (nameIs(node, NAME_BUTTON))         return buildButton(node);
     if (nameIs(node, NAME_LINK))           return buildLink(node, platform);
     if (nameIs(node, NAME_STORIES_CONTAINER)) return buildStoriesContainer(node);
     if (nameIs(node, NAME_STORIES))           return buildStories(node);
