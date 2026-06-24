@@ -552,10 +552,10 @@ async function build(node, platform) {
     if (nameIs(node, NAME_LOGO_BADGE))     return buildLogoBadge(node);
     if (nameIs(node, NAME_PAY_METHOD))     return buildPayMethod(node);
     if (nameIs(node, NAME_LOGO))           return buildLogo(node);
+    if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node);
     if (nameIs(node, NAME_BUTTON))         return buildButton(node, platform);
     if (nameIs(node, NAME_LINK))           return buildLink(node, platform);
     if (nameIs(node, NAME_STORIES))        return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
-    if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node, platform);
 
     if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height, node.name);
 
