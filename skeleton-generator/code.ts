@@ -1,19 +1,23 @@
 // code.ts — Skeleton Generator (Ghost Frames principle)
 //
-// Конвертирует ЛЮБОЙ выделенный Frame/Instance/Group в Skeleton Loading State
-// 1:1 по структуре. Без компонентов, переменных и зависимостей от ДС.
+// Конвертирует ЛЮБОЙ выделенный Frame/Instance/Group в Skeleton Loading State.
+// Без компонентов, переменных и зависимостей от дизайн-системы.
 //
-// РОЛИ-ЦВЕТА:
-//   Surface  #1F1F1F — карточки, контейнеры, кнопки (узел с любой видимой заливкой)
-//   Content  #292929 — текст, иконки, аватары, детали (содержимое внутри)
-//   Stroke   #333333 — обводки инпутов, кнопок, границ контейнеров
-//
-// ГЕОМЕТРИЯ: размеры всех блоков и расстояния между элементами — 1:1 с исходником.
-// Абстрагируются (меняется только форма/цвет, не положение/размер) TEXT и ICON.
+// ЛОГИКА:
+//   Контейнеры (Frame/Instance/Group с дочерними элементами):
+//     — сохраняют оригинальный фон (background primary, secondary и т.д.)
+//     — IMAGE-заливки заменяются на Content #292929
+//   Листья:
+//     — TEXT          → серые полосы #292929 по спецификации
+//     — VECTOR/ICON   → круг #292929 (снап к 12/16/20/24/32)
+//     — ELLIPSE крупная → аватар-круг #292929
+//     — RECTANGLE/прочие → оригинальный фон; IMAGE → #292929
+//   Скрытые слои (visible=false) → пропускаются полностью.
+//   Все размеры и отступы сохраняются 1:1 с исходным макетом.
 //
 // TEXT (#292929, cornerRadius=16):
-//   Large  (Accent-1/2/3, Heading-1/2):      Desktop h=16 / Mobile h=12
-//   Small  (Accent-4, Heading-3/4, Body-1…):  Desktop h=12 / Mobile h=8
+//   Large  (Accent-1/2/3, Heading-1/2):       Desktop h=16 / Mobile h=12
+//   Small  (Accent-4, Heading-3/4, Body-1…):   Desktop h=12 / Mobile h=8
 //   Paragraph (Body-2, Label-1/2, Button-*):
 //     1 строка → как Small
 //     2 строки → [100%] + gap + [58%]
@@ -21,6 +25,7 @@
 //     gap: Desktop=4 / Mobile=2
 //
 // ICON (#292929, cornerRadius=999): снап к 12/16/20/24/32, центр в footprint исходника.
+// STROKE: #333333, толщина из исходника.
 
 figma.showUI(__html__, { width: 320, height: 460 });
 
@@ -33,17 +38,15 @@ function hex(h: string): RGB {
   return { r: ((v >> 16) & 255) / 255, g: ((v >> 8) & 255) / 255, b: (v & 255) / 255 };
 }
 
-const C_SURFACE = hex("#1F1F1F");
 const C_CONTENT = hex("#292929");
 const C_STROKE  = hex("#333333");
 
 type Platform = "Desktop" | "Mobile";
 type TextKind  = "Large" | "Small" | "Paragraph";
 
-const ICON_SIZES    = [12, 16, 20, 24, 32];
+const ICON_SIZES     = [12, 16, 20, 24, 32];
 const ICON_SCALE_MAX = 32;
 
-// Любая видимая заливка (включая IMAGE) означает, что узел — Surface.
 function hasVisibleFill(node: SceneNode): boolean {
   if (!("fills" in node) || !Array.isArray(node.fills)) return false;
   return (node.fills as Paint[]).some((f) => f.visible !== false);
@@ -64,6 +67,16 @@ function applyStroke(target: FrameNode | RectangleNode, source: SceneNode) {
       ? source.strokeWeight
       : 1;
   target.strokeWeight = w > 0 ? w : 1;
+}
+
+// Копирует заливки из исходника: IMAGE-заливки → Content #292929 (картинки не копируем).
+function copyFills(node: SceneNode): Paint[] {
+  if (!("fills" in node) || !Array.isArray(node.fills)) return [];
+  return (node.fills as Paint[])
+    .filter((f) => f.visible !== false)
+    .map((f): Paint =>
+      f.type === "IMAGE" ? { type: "SOLID", color: C_CONTENT } : f,
+    );
 }
 
 function snapIconSize(actual: number): number {
@@ -89,23 +102,22 @@ function detectPlatform(rootWidth: number): Platform {
 // ============================================================
 
 function buildIconCircle(srcW: number, srcH: number): SceneNode {
-  const w = Math.max(srcW, 0.01);
-  const h = Math.max(srcH, 0.01);
+  const w    = Math.max(srcW, 0.01);
+  const h    = Math.max(srcH, 0.01);
   const size = snapIconSize(Math.max(w, h));
 
   const circle = figma.createRectangle();
-  circle.name = "Skeleton/Content/Icon";
+  circle.name         = "Skeleton/Content/Icon";
   circle.resize(size, size);
   circle.cornerRadius = 999;
-  circle.fills = [{ type: "SOLID", color: C_CONTENT }];
+  circle.fills        = [{ type: "SOLID", color: C_CONTENT }];
 
   if (Math.abs(size - w) < 0.5 && Math.abs(size - h) < 0.5) return circle;
 
-  // Оборачиваем в прозрачный фрейм исходного размера → footprint сохраняется.
   const frame = figma.createFrame();
-  frame.name = "Skeleton/Content/Icon";
+  frame.name         = "Skeleton/Content/Icon";
   frame.resize(w, h);
-  frame.fills = [];
+  frame.fills        = [];
   frame.clipsContent = false;
   frame.appendChild(circle);
   circle.x = (w - size) / 2;
@@ -113,7 +125,6 @@ function buildIconCircle(srcW: number, srcH: number): SceneNode {
   return frame;
 }
 
-// Иконочный контейнер: узел ≤32px без фона и без текста — это иконка-инстанс.
 function isIconScaleContainer(node: SceneNode): boolean {
   if (!("children" in node) || (node as ChildrenMixin).children.length === 0) return false;
   if (Math.max(node.width, node.height) > ICON_SCALE_MAX) return false;
@@ -158,7 +169,7 @@ function countLines(node: TextNode): number {
   let lhPx = fontSize * 1.3;
   const lh = node.lineHeight as LineHeight;
   if (typeof lh === "object" && "unit" in lh) {
-    if (lh.unit === "PIXELS")  lhPx = lh.value;
+    if (lh.unit === "PIXELS")       lhPx = lh.value;
     else if (lh.unit === "PERCENT") lhPx = fontSize * (lh.value / 100);
   }
   return Math.max(1, Math.round(node.height / lhPx));
@@ -172,7 +183,7 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
   if (kind === "Large" || kind === "Small") {
     const bh   = kind === "Large" ? largeBarH(platform) : smallBarH(platform);
     const rect = figma.createRectangle();
-    rect.name        = `Skeleton/Content/Text-${kind}`;
+    rect.name         = `Skeleton/Content/Text-${kind}`;
     rect.resize(w, bh);
     rect.cornerRadius = 16;
     rect.fills        = [fill];
@@ -185,7 +196,7 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
 
   if (lines <= 1) {
     const rect = figma.createRectangle();
-    rect.name        = "Skeleton/Content/Text-Paragraph-1L";
+    rect.name         = "Skeleton/Content/Text-Paragraph-1L";
     rect.resize(w, bh);
     rect.cornerRadius = 16;
     rect.fills        = [fill];
@@ -195,9 +206,9 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
   const barCount = Math.min(lines, 3);
   const totalH   = barCount * bh + (barCount - 1) * gap;
   const frame    = figma.createFrame();
-  frame.name        = `Skeleton/Content/Text-Paragraph-${barCount}L`;
+  frame.name         = `Skeleton/Content/Text-Paragraph-${barCount}L`;
   frame.resize(w, Math.max(totalH, 0.01));
-  frame.fills       = [];
+  frame.fills        = [];
   frame.clipsContent = false;
 
   for (let i = 0; i < barCount; i++) {
@@ -226,12 +237,10 @@ async function buildLeaf(node: SceneNode, platform: Platform): Promise<SceneNode
   const w = Math.max(node.width, 0.01);
   const h = Math.max(node.height, 0.01);
 
-  // Векторные примитивы → иконка-круг (снап размера)
   if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE") {
     return buildIconCircle(node.width, node.height);
   }
 
-  // ELLIPSE: крупный → аватар (точный размер), мелкий → иконка (снап)
   if (node.type === "ELLIPSE") {
     if (Math.max(w, h) > ICON_SCALE_MAX) {
       const rect         = figma.createRectangle();
@@ -244,13 +253,18 @@ async function buildLeaf(node: SceneNode, platform: Platform): Promise<SceneNode
     return buildIconCircle(node.width, node.height);
   }
 
-  // Прочие листья (RECTANGLE и т.д.) — точный размер 1:1.
-  // Surface если у исходника была любая видимая заливка, иначе Content.
+  // RECTANGLE и прочие листья — сохраняем оригинальный фон.
+  // IMAGE-заливки → Content #292929 (картинку не отображаем).
   const rect  = figma.createRectangle();
   rect.resize(w, h);
-  const isSurface = hasVisibleFill(node);
-  rect.name   = isSurface ? "Skeleton/Surface" : "Skeleton/Content/Detail";
-  rect.fills  = [{ type: "SOLID", color: isSurface ? C_SURFACE : C_CONTENT }];
+  const fills = copyFills(node);
+  if (fills.length === 0) {
+    rect.name  = "Skeleton/Content/Detail";
+    rect.fills = [{ type: "SOLID", color: C_CONTENT }];
+  } else {
+    rect.name  = "Skeleton/Surface";
+    rect.fills = fills;
+  }
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
     rect.cornerRadius = node.cornerRadius;
   }
@@ -262,8 +276,10 @@ async function buildLeaf(node: SceneNode, platform: Platform): Promise<SceneNode
 // RECURSION — Ghost Frames
 // ============================================================
 
-async function build(node: SceneNode, platform: Platform): Promise<SceneNode> {
-  // Иконка-контейнер (≤32px, без фона, без текста) → один круг
+async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
+  // Скрытые слои полностью пропускаются
+  if (node.visible === false) return null;
+
   if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
 
   if (!("children" in node) || (node as ChildrenMixin).children.length === 0) {
@@ -272,18 +288,13 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode> {
 
   const src = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
 
-  // Создаём Frame точного размера исходника.
-  // Если исходник имел видимую заливку — Surface, иначе прозрачная обёртка.
   const frame = figma.createFrame();
   frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
 
-  if (hasVisibleFill(node)) {
-    frame.fills = [{ type: "SOLID", color: C_SURFACE }];
-    frame.name  = "Skeleton/Surface/Container";
-  } else {
-    frame.fills = [];
-    frame.name  = "Skeleton/Container";
-  }
+  // Контейнеры сохраняют оригинальный фон (background primary/secondary и т.д.)
+  const fills = copyFills(node);
+  frame.fills = fills;
+  frame.name  = fills.length > 0 ? "Skeleton/Surface/Container" : "Skeleton/Container";
 
   if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
     frame.cornerRadius = src.cornerRadius;
@@ -292,10 +303,12 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode> {
   frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
 
   for (const child of src.children) {
+    if (child.visible === false) continue; // скрытые дочерние слои пропускаем
+
     const built = await build(child, platform);
+    if (built === null) continue;
+
     frame.appendChild(built);
-    // child.x/child.y — позиция дочернего узла относительно родителя.
-    // Для GroupNode дети хранят координаты относительно самой группы (как и Frame).
     built.x = child.x;
     built.y = child.y;
   }
@@ -321,8 +334,9 @@ figma.ui.onmessage = async (msg) => {
   for (const source of selection) {
     const platform = detectPlatform(source.width);
     const root     = await build(source, platform);
-    figma.currentPage.appendChild(root);
+    if (!root) continue;
 
+    figma.currentPage.appendChild(root);
     const box = source.absoluteBoundingBox;
     if (box) {
       root.x = box.x + box.width + 80;

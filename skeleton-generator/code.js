@@ -5,14 +5,12 @@ function hex(h) {
     const v = parseInt(h.replace("#", ""), 16);
     return { r: ((v >> 16) & 255) / 255, g: ((v >> 8) & 255) / 255, b: (v & 255) / 255 };
 }
-const C_SURFACE = hex("#1F1F1F");
 const C_CONTENT = hex("#292929");
 const C_STROKE  = hex("#333333");
 
 const ICON_SIZES     = [12, 16, 20, 24, 32];
 const ICON_SCALE_MAX = 32;
 
-// Любая видимая заливка (включая IMAGE) → узел считается Surface.
 function hasVisibleFill(node) {
     if (!("fills" in node) || !Array.isArray(node.fills)) return false;
     return node.fills.some((f) => f.visible !== false);
@@ -25,6 +23,16 @@ function applyStroke(target, source) {
     const w = "strokeWeight" in source && typeof source.strokeWeight === "number" ? source.strokeWeight : 1;
     target.strokeWeight = w > 0 ? w : 1;
 }
+
+// Копирует заливки из исходника. IMAGE-заливки заменяет на Content #292929
+// (реальную картинку в скелетоне не показываем).
+function copyFills(node) {
+    if (!("fills" in node) || !Array.isArray(node.fills)) return [];
+    return node.fills
+        .filter((f) => f.visible !== false)
+        .map((f) => f.type === "IMAGE" ? { type: "SOLID", color: C_CONTENT } : f);
+}
+
 function snapIconSize(actual) {
     let best = ICON_SIZES[0];
     let bestDiff = Math.abs(actual - best);
@@ -184,12 +192,19 @@ async function buildLeaf(node, platform) {
         return buildIconCircle(node.width, node.height);
     }
 
-    // RECTANGLE и прочие листья — точный размер 1:1.
-    const rect      = figma.createRectangle();
+    // RECTANGLE и прочие листья.
+    // Если есть IMAGE-заливка — это картинка, заменяем на Content-плейсхолдер.
+    // Иначе сохраняем оригинальные заливки (фоны, градиенты и т.д.).
+    const rect  = figma.createRectangle();
     rect.resize(w, h);
-    const isSurface = hasVisibleFill(node);
-    rect.name       = isSurface ? "Skeleton/Surface" : "Skeleton/Content/Detail";
-    rect.fills      = [{ type: "SOLID", color: isSurface ? C_SURFACE : C_CONTENT }];
+    const fills = copyFills(node);
+    if (fills.length === 0) {
+        rect.name  = "Skeleton/Content/Detail";
+        rect.fills = [{ type: "SOLID", color: C_CONTENT }];
+    } else {
+        rect.name  = "Skeleton/Surface";
+        rect.fills = fills;
+    }
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
         rect.cornerRadius = node.cornerRadius;
     }
@@ -199,6 +214,9 @@ async function buildLeaf(node, platform) {
 
 // ---------- RECURSION ----------
 async function build(node, platform) {
+    // Скрытые слои не попадают в скелетон
+    if (node.visible === false) return null;
+
     if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
 
     if (!("children" in node) || node.children.length === 0) {
@@ -209,13 +227,11 @@ async function build(node, platform) {
     const frame = figma.createFrame();
     frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
 
-    if (hasVisibleFill(node)) {
-        frame.fills = [{ type: "SOLID", color: C_SURFACE }];
-        frame.name  = "Skeleton/Surface/Container";
-    } else {
-        frame.fills = [];
-        frame.name  = "Skeleton/Container";
-    }
+    // Контейнеры сохраняют оригинальный фон (background primary/secondary и т.д.).
+    // IMAGE-заливки заменяем на Content #292929.
+    const fills = copyFills(node);
+    frame.fills = fills;
+    frame.name  = fills.length > 0 ? "Skeleton/Surface/Container" : "Skeleton/Container";
 
     if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
         frame.cornerRadius = src.cornerRadius;
@@ -224,7 +240,12 @@ async function build(node, platform) {
     frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
 
     for (const child of src.children) {
+        // Пропускаем скрытые дочерние слои
+        if (child.visible === false) continue;
+
         const built = await build(child, platform);
+        if (built === null) continue;
+
         frame.appendChild(built);
         built.x = child.x;
         built.y = child.y;
@@ -246,6 +267,7 @@ figma.ui.onmessage = async (msg) => {
     for (const source of selection) {
         const platform = detectPlatform(source.width);
         const root     = await build(source, platform);
+        if (!root) continue;
         figma.currentPage.appendChild(root);
         const box = source.absoluteBoundingBox;
         if (box) {
