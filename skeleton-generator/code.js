@@ -25,6 +25,7 @@ const NAME_STATUS_BLOCK = ["status-block", "status block", "statusblock"];
 const NAME_LOGO         = ["logo"];
 const NAME_STORIES      = ["stories"];
 const NAME_LINK           = ["link"];
+const NAME_BADGE          = ["badge"];
 const NAME_CAT_BTN_SLIDER = ["category button slider"];
 const NAME_PLAY_WIN     = ["play & win", "play&win", "play and win"];
 
@@ -527,9 +528,17 @@ function isAbsolutePos(node) {
     return "layoutPositioning" in node && node.layoutPositioning === "ABSOLUTE";
 }
 
+function isImageNode(node) {
+    if (!("fills" in node) || !Array.isArray(node.fills)) return false;
+    const visible = node.fills.filter((f) => f.visible !== false);
+    return visible.length > 0 && visible.every((f) => f.type === "IMAGE");
+}
+
 async function build(node, platform) {
     if (node.visible === false) return null;
     if (isAbsolutePos(node)) return null;
+    if (isImageNode(node)) return null;
+    if (nameIs(node, NAME_BADGE)) return null;
 
     if (nameIs(node, NAME_DIVIDER))        return buildDivider(node);
     if (nameIs(node, NAME_STATUS_BLOCK))   return buildStatusBlock(node);

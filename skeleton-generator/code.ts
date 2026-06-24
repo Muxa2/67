@@ -27,6 +27,7 @@ const NAME_STATUS_BLOCK   = ["status-block", "status block", "statusblock"];
 const NAME_LOGO           = ["logo"];
 const NAME_STORIES        = ["stories"];
 const NAME_LINK           = ["link"];
+const NAME_BADGE          = ["badge"];
 const NAME_CAT_BTN_SLIDER = ["category button slider"];
 const NAME_PLAY_WIN       = ["play & win", "play&win", "play and win"];
 
@@ -37,6 +38,12 @@ function nameIs(node: SceneNode, keywords: string[]): boolean {
 
 function isAbsolutePos(node: SceneNode): boolean {
   return "layoutPositioning" in node && (node as any).layoutPositioning === "ABSOLUTE";
+}
+
+function isImageNode(node: SceneNode): boolean {
+  if (!("fills" in node) || !Array.isArray(node.fills)) return false;
+  const visible = (node.fills as Paint[]).filter((f) => f.visible !== false);
+  return visible.length > 0 && visible.every((f) => f.type === "IMAGE");
 }
 
 // ============================================================
@@ -585,6 +592,8 @@ async function buildCatBtnSlider(node: SceneNode, platform: Platform): Promise<F
 async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
   if (node.visible === false) return null;
   if (isAbsolutePos(node)) return null;
+  if (isImageNode(node)) return null;
+  if (nameIs(node, NAME_BADGE)) return null;
 
   if (nameIs(node, NAME_DIVIDER))        return buildDivider(node);
   if (nameIs(node, NAME_STATUS_BLOCK))   return buildStatusBlock(node);
