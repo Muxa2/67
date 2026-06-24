@@ -587,7 +587,7 @@ async function buildCatBtnSlider(node: SceneNode, platform: Platform): Promise<F
   const frame = figma.createFrame();
   frame.name         = node.name;
   frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
-  frame.fills        = isRandomGame(node) ? [{ type: "SOLID", color: C_SURFACE }] : [];
+  frame.fills        = [];
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
   frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : true;
   const hasAL = applyAutoLayout(frame, node);
