@@ -124,7 +124,8 @@ function applyChildLayoutSizing(built: SceneNode, srcChild: SceneNode): void {
     const s = srcChild as any;
     const b = built as any;
     if (srcChild.type === "TEXT") {
-      b.layoutSizingHorizontal = "FILL";
+      if ("layoutSizingHorizontal" in s) b.layoutSizingHorizontal = s.layoutSizingHorizontal;
+      else b.layoutSizingHorizontal = "FILL";
       if ("layoutSizingVertical" in s) b.layoutSizingVertical = s.layoutSizingVertical;
       return;
     }
@@ -315,14 +316,17 @@ function classifyByStyleName(name: string): TextKind | null {
   return null;
 }
 
-async function getTextKind(node: TextNode): Promise<TextKind> {
+async function getTextInfo(node: TextNode): Promise<{ kind: TextKind; styleName: string }> {
   const styleId = node.textStyleId;
   if (typeof styleId === "string" && styleId) {
     const style = await figma.getStyleByIdAsync(styleId);
-    if (style) { const kind = classifyByStyleName(style.name); if (kind) return kind; }
+    if (style) {
+      const kind = classifyByStyleName(style.name);
+      return { kind: kind || (typeof node.fontSize === "number" && node.fontSize >= 20 ? "Large" : "Small"), styleName: style.name };
+    }
   }
   const fontSize = typeof node.fontSize === "number" ? node.fontSize : 14;
-  return fontSize >= 20 ? "Large" : "Small";
+  return { kind: fontSize >= 20 ? "Large" : "Small", styleName: "" };
 }
 
 function smallBarH(p: Platform): number { return p === "Desktop" ? 12 : 8; }
@@ -341,24 +345,18 @@ function countLines(node: TextNode): number {
 }
 
 async function buildText(node: TextNode, platform: Platform): Promise<SceneNode> {
-  const kind = await getTextKind(node);
+  const { kind, styleName } = await getTextInfo(node);
   let w = Math.max(node.width, 0.01);
   const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
 
   // Heading-2: fixed size (Desktop 204×16, Mobile 106×16)
-  if (kind === "Large") {
-    const styleId = node.textStyleId;
-    if (typeof styleId === "string" && styleId) {
-      const style = await figma.getStyleByIdAsync(styleId);
-      if (style && style.name.includes("Heading-2")) {
-        const rect = figma.createRectangle();
-        rect.name         = node.name;
-        rect.resize(platform === "Desktop" ? 204 : 106, 16);
-        rect.cornerRadius = 16;
-        rect.fills        = [fill];
-        return rect;
-      }
-    }
+  if (kind === "Large" && styleName.includes("Heading-2")) {
+    const rect = figma.createRectangle();
+    rect.name         = node.name;
+    rect.resize(platform === "Desktop" ? 204 : 106, 16);
+    rect.cornerRadius = 16;
+    rect.fills        = [fill];
+    return rect;
   }
 
   if (kind === "Large" || kind === "Small") {

@@ -92,7 +92,8 @@ function applyAutoLayout(frame, src) {
 function applyChildLayoutSizing(built, srcChild) {
     try {
         if (srcChild.type === "TEXT") {
-            built.layoutSizingHorizontal = "FILL";
+            if ("layoutSizingHorizontal" in srcChild) built.layoutSizingHorizontal = srcChild.layoutSizingHorizontal;
+            else built.layoutSizingHorizontal = "FILL";
             if ("layoutSizingVertical" in srcChild) built.layoutSizingVertical = srcChild.layoutSizingVertical;
             return;
         }
@@ -268,14 +269,17 @@ function classifyByStyleName(name) {
     if (PARAGRAPH_KEYWORDS.some((k) => name.includes(k))) return "Paragraph";
     return null;
 }
-async function getTextKind(node) {
+async function getTextInfo(node) {
     const styleId = node.textStyleId;
     if (typeof styleId === "string" && styleId) {
         const style = await figma.getStyleByIdAsync(styleId);
-        if (style) { const kind = classifyByStyleName(style.name); if (kind) return kind; }
+        if (style) {
+            const kind = classifyByStyleName(style.name);
+            return { kind: kind || (typeof node.fontSize === "number" && node.fontSize >= 20 ? "Large" : "Small"), styleName: style.name };
+        }
     }
     const fontSize = typeof node.fontSize === "number" ? node.fontSize : 14;
-    return fontSize >= 20 ? "Large" : "Small";
+    return { kind: fontSize >= 20 ? "Large" : "Small", styleName: "" };
 }
 function smallBarH(p) { return p === "Desktop" ? 12 : 8; }
 function largeBarH(p) { return p === "Desktop" ? 16 : 12; }
@@ -293,24 +297,18 @@ function countLines(node) {
 }
 
 async function buildText(node, platform) {
-    const kind = await getTextKind(node);
+    const { kind, styleName } = await getTextInfo(node);
     let w = Math.max(node.width, 0.01);
     const fill = { type: "SOLID", color: C_CONTENT };
 
     // Heading-2: fixed size (Desktop 204×16, Mobile 106×16)
-    if (kind === "Large") {
-        const styleId = node.textStyleId;
-        if (typeof styleId === "string" && styleId) {
-            const style = await figma.getStyleByIdAsync(styleId);
-            if (style && style.name.includes("Heading-2")) {
-                const rect = figma.createRectangle();
-                rect.name         = node.name;
-                rect.resize(platform === "Desktop" ? 204 : 106, 16);
-                rect.cornerRadius = 16;
-                rect.fills        = [fill];
-                return rect;
-            }
-        }
+    if (kind === "Large" && styleName.includes("Heading-2")) {
+        const rect = figma.createRectangle();
+        rect.name         = node.name;
+        rect.resize(platform === "Desktop" ? 204 : 106, 16);
+        rect.cornerRadius = 16;
+        rect.fills        = [fill];
+        return rect;
     }
 
     if (kind === "Large" || kind === "Small") {
