@@ -523,7 +523,7 @@ function buildCatBtnSlider(node) {
     const frame = figma.createFrame();
     frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
-    frame.fills        = [];
+    frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
     frame.clipsContent = false;
     return frame;
