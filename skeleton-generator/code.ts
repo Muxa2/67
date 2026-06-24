@@ -345,12 +345,19 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
   let w = Math.max(node.width, 0.01);
   const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
 
-  // Heading-2: max display width 164px
+  // Heading-2: fixed size (Desktop 204×16, Mobile 106×16)
   if (kind === "Large") {
     const styleId = node.textStyleId;
     if (typeof styleId === "string" && styleId) {
       const style = await figma.getStyleByIdAsync(styleId);
-      if (style && style.name.includes("Heading-2")) w = Math.min(w, 164);
+      if (style && style.name.includes("Heading-2")) {
+        const rect = figma.createRectangle();
+        rect.name         = node.name;
+        rect.resize(platform === "Desktop" ? 204 : 106, 16);
+        rect.cornerRadius = 16;
+        rect.fills        = [fill];
+        return rect;
+      }
     }
   }
 
