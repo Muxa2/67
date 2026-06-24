@@ -41,8 +41,12 @@ const NAME_DIVIDER      = ["divider", "дивайдер", "separator", "dividers
 const NAME_LOGO_BADGE   = ["logo badge", "logo-badge", "logobadge"];
 const NAME_PAY_METHOD   = ["pay method logo", "pay-method-logo", "payment logo", "pay method"];
 const NAME_BUTTON       = ["button"];
+const NAME_LINK         = ["link"];
 const NAME_STATUS_BLOCK = ["status-block", "status block", "statusblock"];
 const NAME_LOGO         = ["logo"];
+const NAME_STORIES      = ["stories"];
+const NAME_PLAY_WIN     = ["play & win", "play&win", "play and win"];
+const NAME_CAT_BTN      = ["category button slider", "category-button-slider"];
 
 function nameIs(node: SceneNode, keywords: string[]): boolean {
   const n = node.name.toLowerCase();
@@ -187,15 +191,23 @@ async function buildButtonContent(node: SceneNode, platform: Platform): Promise<
   return rect;
 }
 
-async function buildButton(node: SceneNode, platform: Platform): Promise<FrameNode> {
+async function buildButton(node: SceneNode, platform: Platform, noFill = false): Promise<FrameNode> {
   const frame = figma.createFrame();
-  frame.name         = "Skeleton/Button";
+  frame.name         = noFill ? "Skeleton/Link" : "Skeleton/Button";
   frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
-  frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
+  frame.fills        = noFill ? [] : [{ type: "SOLID", color: C_SURFACE }];
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
     frame.cornerRadius = node.cornerRadius;
   }
   if (hasStroke(node)) applyStroke(frame, node);
+  const hasAL = applyAutoLayout(frame, node);
+  if (!hasAL) {
+    frame.layoutMode            = "HORIZONTAL";
+    frame.primaryAxisAlignItems = "CENTER";
+    frame.counterAxisAlignItems = "CENTER";
+    frame.primaryAxisSizingMode = "FIXED";
+    frame.counterAxisSizingMode = "FIXED";
+  }
   frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : true;
   if ("children" in node) {
     for (const child of (node as ChildrenMixin).children) {
@@ -203,8 +215,54 @@ async function buildButton(node: SceneNode, platform: Platform): Promise<FrameNo
       const built = await buildButtonContent(child, platform);
       if (!built) continue;
       frame.appendChild(built);
-      built.x = child.x;
-      built.y = child.y;
+      if (!hasAL) { built.x = child.x; built.y = child.y; }
+    }
+  }
+  return frame;
+}
+
+async function buildStories(node: SceneNode, platform: Platform): Promise<FrameNode> {
+  const frame = figma.createFrame();
+  frame.name         = "Skeleton/Stories";
+  frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  frame.fills        = [];
+  frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
+  frame.strokeWeight = 2;
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    frame.cornerRadius = node.cornerRadius;
+  }
+  const hasAL = applyAutoLayout(frame, node);
+  frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : false;
+  if ("children" in node) {
+    for (const child of (node as ChildrenMixin).children) {
+      if (child.visible === false) continue;
+      const built = await build(child, platform);
+      if (!built) continue;
+      frame.appendChild(built);
+      if (!hasAL) { built.x = child.x; built.y = child.y; }
+    }
+  }
+  return frame;
+}
+
+async function buildCategoryBtn(node: SceneNode, platform: Platform, withFill: boolean): Promise<FrameNode> {
+  const frame = figma.createFrame();
+  frame.name         = "Skeleton/Category Button";
+  frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  frame.fills        = withFill ? [{ type: "SOLID", color: C_SURFACE }] : [];
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    frame.cornerRadius = node.cornerRadius;
+  }
+  if (hasStroke(node)) applyStroke(frame, node);
+  const hasAL = applyAutoLayout(frame, node);
+  frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : true;
+  if ("children" in node) {
+    for (const child of (node as ChildrenMixin).children) {
+      if (child.visible === false) continue;
+      const built = await build(child, platform);
+      if (!built) continue;
+      frame.appendChild(built);
+      if (!hasAL) { built.x = child.x; built.y = child.y; }
     }
   }
   return frame;
@@ -231,6 +289,39 @@ function buildLogo(node: SceneNode): RectangleNode {
 // ============================================================
 // ICON
 // ============================================================
+
+function getInstanceProp(node: SceneNode, propKey: string): string | null {
+  if (node.type !== "INSTANCE" || !node.componentProperties) return null;
+  for (const key of Object.keys(node.componentProperties)) {
+    if (key.toLowerCase().startsWith(propKey.toLowerCase())) {
+      return String(node.componentProperties[key].value).toLowerCase();
+    }
+  }
+  return null;
+}
+
+function fullNodeName(node: SceneNode): string {
+  if (node.type === "INSTANCE" && node.mainComponent) {
+    return (node.mainComponent.name || node.name).toLowerCase();
+  }
+  return node.name.toLowerCase();
+}
+
+function applyAutoLayout(frame: FrameNode, src: SceneNode): boolean {
+  if (!("layoutMode" in src) || (src as FrameNode).layoutMode === "NONE") return false;
+  const s = src as FrameNode;
+  frame.layoutMode            = s.layoutMode;
+  frame.primaryAxisAlignItems = s.primaryAxisAlignItems || "MIN";
+  frame.counterAxisAlignItems = s.counterAxisAlignItems || "MIN";
+  frame.primaryAxisSizingMode = "FIXED";
+  frame.counterAxisSizingMode = "FIXED";
+  frame.paddingTop    = s.paddingTop    || 0;
+  frame.paddingBottom = s.paddingBottom || 0;
+  frame.paddingLeft   = s.paddingLeft   || 0;
+  frame.paddingRight  = s.paddingRight  || 0;
+  frame.itemSpacing   = s.itemSpacing   || 0;
+  return true;
+}
 
 function snapIconSize(actual: number): number {
   let best = ICON_SIZES[0];
@@ -419,25 +510,8 @@ function detectPlatform(rootWidth: number): Platform {
   return rootWidth <= 480 ? "Mobile" : "Desktop";
 }
 
-async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
-  if (node.visible === false) return null;
-
-  // Специальные компоненты по имени (порядок важен: более специфичные — первыми)
-  if (nameIs(node, NAME_DIVIDER))      return buildDivider(node);
-  if (nameIs(node, NAME_STATUS_BLOCK)) return buildStatusBlock(node);
-  if (nameIs(node, NAME_LOGO_BADGE))   return buildLogoBadge(node);
-  if (nameIs(node, NAME_PAY_METHOD))   return buildPayMethod(node);
-  if (nameIs(node, NAME_LOGO))         return buildLogo(node);
-  if (nameIs(node, NAME_BUTTON))       return buildButton(node, platform);
-
-  if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
-
-  if (!("children" in node) || (node as ChildrenMixin).children.length === 0) {
-    return buildLeaf(node, platform);
-  }
-
-  const src = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
-
+async function buildGenericContainer(node: SceneNode, platform: Platform): Promise<FrameNode> {
+  const src   = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
   const frame = figma.createFrame();
   frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
 
@@ -449,20 +523,54 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
     frame.cornerRadius = src.cornerRadius;
   }
   if (hasStroke(node)) applyStroke(frame, node);
+
+  const hasAL = applyAutoLayout(frame, src);
   frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
 
   for (const child of src.children) {
     if (child.visible === false) continue;
-
     const built = await build(child, platform);
     if (built === null) continue;
-
     frame.appendChild(built);
-    built.x = child.x;
-    built.y = child.y;
+    if (!hasAL) { built.x = child.x; built.y = child.y; }
+  }
+  return frame;
+}
+
+async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
+  if (node.visible === false) return null;
+
+  // Специальные компоненты (более специфичные — первыми)
+  if (nameIs(node, NAME_DIVIDER))      return buildDivider(node);
+  if (nameIs(node, NAME_STATUS_BLOCK)) return buildStatusBlock(node);
+  if (nameIs(node, NAME_LOGO_BADGE))   return buildLogoBadge(node);
+  if (nameIs(node, NAME_PAY_METHOD))   return buildPayMethod(node);
+  if (nameIs(node, NAME_STORIES))      return buildStories(node, platform);
+  if (nameIs(node, NAME_LOGO))         return buildLogo(node);
+  if (nameIs(node, NAME_LINK))         return buildButton(node, platform, true);
+  if (nameIs(node, NAME_BUTTON))       return buildButton(node, platform, false);
+
+  if (nameIs(node, NAME_CAT_BTN)) {
+    const typeProp = getInstanceProp(node, "type");
+    const isRandom = (typeProp && typeProp.includes("random")) ||
+                     fullNodeName(node).includes("random game");
+    return buildCategoryBtn(node, platform, isRandom);
   }
 
-  return frame;
+  if (nameIs(node, NAME_PLAY_WIN)) {
+    const result = await buildGenericContainer(node, platform);
+    result.strokes      = [{ type: "SOLID", color: C_STROKE }];
+    result.strokeWeight = 1;
+    return result;
+  }
+
+  if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
+
+  if (!("children" in node) || (node as ChildrenMixin).children.length === 0) {
+    return buildLeaf(node, platform);
+  }
+
+  return buildGenericContainer(node, platform);
 }
 
 // ============================================================
