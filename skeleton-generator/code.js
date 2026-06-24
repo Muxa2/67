@@ -13,7 +13,6 @@ const ICON_SIZES     = [12, 16, 20, 24, 32];
 const ICON_SCALE_MAX = 32;
 
 // ---------- NAME MATCHING ----------
-// Совпадение имени узла (регистронезависимо) с одним из ключевых слов.
 function nameIs(node, keywords) {
     const n = node.name.toLowerCase();
     return keywords.some((k) => n.includes(k));
@@ -22,13 +21,12 @@ const NAME_DIVIDER      = ["divider", "дивайдер", "separator", "dividers
 const NAME_LOGO_BADGE   = ["logo badge", "logo-badge", "logobadge"];
 const NAME_PAY_METHOD   = ["pay method logo", "pay-method-logo", "payment logo", "pay method"];
 const NAME_BUTTON       = ["button"];
-const NAME_STATUS_BLOCK    = ["status-block", "status block", "statusblock"];
-const NAME_LOGO            = ["logo"];
-const NAME_STORIES         = ["stories"];
-const NAME_CAT_BTN_SLIDER  = ["category button slider"];
-const NAME_PLAY_WIN        = ["play & win", "play&win", "play and win"];
+const NAME_STATUS_BLOCK = ["status-block", "status block", "statusblock"];
+const NAME_LOGO         = ["logo"];
+const NAME_STORIES      = ["stories"];
+const NAME_CAT_BTN_SLIDER = ["category button slider"];
+const NAME_PLAY_WIN     = ["play & win", "play&win", "play and win"];
 
-// Цвета-стили, заливки которых заменяются на Content #292929.
 const FILL_STYLE_REPLACE = ["yellow", "red", "purple"];
 
 // ---------- FILL HELPERS ----------
@@ -44,19 +42,14 @@ function applyStroke(target, source) {
     const w = "strokeWeight" in source && typeof source.strokeWeight === "number" ? source.strokeWeight : 1;
     target.strokeWeight = w > 0 ? w : 1;
 }
-
-// Проверяет fillStyleId узла: если стиль называется yellow/red/purple → заменить на #292929.
 async function fillColorNeedsReplacement(node) {
     if (!("fillStyleId" in node)) return false;
     const id = node.fillStyleId;
     if (typeof id !== "string" || !id) return false;
     const style = await figma.getStyleByIdAsync(id);
     if (!style) return false;
-    const name = style.name.toLowerCase();
-    return FILL_STYLE_REPLACE.some((k) => name.includes(k));
+    return FILL_STYLE_REPLACE.some((k) => style.name.toLowerCase().includes(k));
 }
-
-// Копирует заливки: IMAGE → #292929. Если цвет-стиль из списка замены → #292929.
 async function copyFills(node) {
     if (!("fills" in node) || !Array.isArray(node.fills)) return [];
     const replaceColor = await fillColorNeedsReplacement(node);
@@ -68,87 +61,96 @@ async function copyFills(node) {
             return f;
         });
 }
-
-// Копирует заливки БЕЗ замены (для divider — сохранить оригинал полностью).
 function copyFillsVerbatim(node) {
     if (!("fills" in node) || !Array.isArray(node.fills)) return [];
     return node.fills.filter((f) => f.visible !== false);
 }
 
+// ---------- AUTO LAYOUT ----------
+// Copy Auto Layout from source frame to skeleton frame.
+// Returns true if AL was applied (so caller skips manual x/y positioning).
+function applyAutoLayout(frame, src) {
+    if (!("layoutMode" in src) || src.layoutMode === "NONE") return false;
+    frame.layoutMode             = src.layoutMode;
+    frame.primaryAxisSizingMode  = "FIXED";
+    frame.counterAxisSizingMode  = "FIXED";
+    if (typeof src.itemSpacing    === "number") frame.itemSpacing    = src.itemSpacing;
+    if (typeof src.paddingLeft    === "number") frame.paddingLeft    = src.paddingLeft;
+    if (typeof src.paddingRight   === "number") frame.paddingRight   = src.paddingRight;
+    if (typeof src.paddingTop     === "number") frame.paddingTop     = src.paddingTop;
+    if (typeof src.paddingBottom  === "number") frame.paddingBottom  = src.paddingBottom;
+    if (src.primaryAxisAlignItems) frame.primaryAxisAlignItems = src.primaryAxisAlignItems;
+    if (src.counterAxisAlignItems) frame.counterAxisAlignItems = src.counterAxisAlignItems;
+    try { if (src.layoutWrap) frame.layoutWrap = src.layoutWrap; } catch (_) {}
+    return true;
+}
+
+// Apply child layout sizing properties when the parent has Auto Layout.
+function applyChildLayoutSizing(built, srcChild) {
+    try {
+        if ("layoutSizingHorizontal" in srcChild) built.layoutSizingHorizontal = srcChild.layoutSizingHorizontal;
+        if ("layoutSizingVertical"   in srcChild) built.layoutSizingVertical   = srcChild.layoutSizingVertical;
+        if ("layoutAlign" in srcChild) built.layoutAlign = srcChild.layoutAlign;
+        if ("layoutGrow"  in srcChild && typeof srcChild.layoutGrow === "number") built.layoutGrow = srcChild.layoutGrow;
+    } catch (_) {}
+}
+
 // ---------- SNAP ICON ----------
 function snapIconSize(actual) {
-    let best = ICON_SIZES[0];
-    let bestDiff = Math.abs(actual - best);
+    let best = ICON_SIZES[0], bestDiff = Math.abs(actual - best);
     for (const s of ICON_SIZES) {
         const d = Math.abs(actual - s);
         if (d < bestDiff) { bestDiff = d; best = s; }
     }
     return best;
 }
-
 function detectPlatform(rootWidth) {
     return rootWidth <= 480 ? "Mobile" : "Desktop";
 }
 
 // ---------- SPECIAL BUILDERS ----------
 
-// Divider: сохраняем оригинальный вид полностью.
 function buildDivider(node) {
-    const w = Math.max(node.width, 0.01);
-    const h = Math.max(node.height, 0.01);
     const rect = figma.createRectangle();
     rect.name   = node.name;
-    rect.resize(w, h);
+    rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     rect.fills  = copyFillsVerbatim(node);
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        rect.cornerRadius = node.cornerRadius;
-    }
-    if (hasStroke(node)) {
-        rect.strokes      = node.strokes.slice();
-        rect.strokeWeight = node.strokeWeight || 1;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") rect.cornerRadius = node.cornerRadius;
+    if (hasStroke(node)) { rect.strokes = node.strokes.slice(); rect.strokeWeight = node.strokeWeight || 1; }
     return rect;
 }
 
-// Logo badge: пустой фрейм только с обводкой #333333, без контента.
 function buildLogoBadge(node) {
     const frame = figma.createFrame();
-    frame.name         = "Skeleton/Logo Badge";
+    frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     frame.fills        = [];
     frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
     frame.strokeWeight = 1;
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        frame.cornerRadius = node.cornerRadius;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
     frame.clipsContent = false;
     return frame;
 }
 
-// Pay method logo: заливка #1F1F1F, без контента внутри.
 function buildPayMethod(node) {
     const frame = figma.createFrame();
-    frame.name         = "Skeleton/Pay Method";
+    frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        frame.cornerRadius = node.cornerRadius;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
     frame.clipsContent = false;
     return frame;
 }
 
-// Button: заливка #1F1F1F, скругление из исходника; всё содержимое → #292929 (рекурсии нет).
 async function buildButton(node, platform) {
     const frame = figma.createFrame();
-    frame.name         = "Skeleton/Button";
+    frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        frame.cornerRadius = node.cornerRadius;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
     if (hasStroke(node)) applyStroke(frame, node);
     frame.clipsContent = "clipsContent" in node ? node.clipsContent : true;
+    const hasAL = applyAutoLayout(frame, node);
 
     if ("children" in node) {
         for (const child of node.children) {
@@ -156,63 +158,57 @@ async function buildButton(node, platform) {
             const built = await buildButtonContent(child, platform);
             if (!built) continue;
             frame.appendChild(built);
-            built.x = child.x;
-            built.y = child.y;
+            if (hasAL) applyChildLayoutSizing(built, child);
+            else { built.x = child.x; built.y = child.y; }
         }
     }
     return frame;
 }
 
-// Содержимое кнопки: TEXT→полоса #292929, ICON→круг #292929, прочее→rect #292929.
 async function buildButtonContent(node, platform) {
     if (node.visible === false) return null;
     if (node.type === "TEXT") return buildText(node, platform);
-    if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE") {
-        return buildIconCircle(node.width, node.height);
-    }
-    if (node.type === "ELLIPSE" || isIconScaleContainer(node)) {
-        return buildIconCircle(node.width, node.height);
-    }
-    // Любой другой узел → прозрачный контейнер #292929 того же размера
+    if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE")
+        return buildIconCircle(node.width, node.height, node.name);
+    if (node.type === "ELLIPSE" || isIconScaleContainer(node))
+        return buildIconCircle(node.width, node.height, node.name);
     if ("children" in node && node.children.length > 0) {
         const frame = figma.createFrame();
+        frame.name         = node.name;
         frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
         frame.fills        = [];
-        frame.clipsContent = false;
+        frame.clipsContent = "clipsContent" in node ? node.clipsContent : false;
+        const hasAL = applyAutoLayout(frame, node);
         for (const child of node.children) {
             if (child.visible === false) continue;
             const built = await buildButtonContent(child, platform);
             if (!built) continue;
             frame.appendChild(built);
-            built.x = child.x;
-            built.y = child.y;
+            if (hasAL) applyChildLayoutSizing(built, child);
+            else { built.x = child.x; built.y = child.y; }
         }
         return frame;
     }
     const rect = figma.createRectangle();
-    rect.name         = "Skeleton/Content/Detail";
+    rect.name         = node.name;
     rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        rect.cornerRadius = node.cornerRadius;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") rect.cornerRadius = node.cornerRadius;
     return rect;
 }
 
-// Status-block: один прямоугольник #292929, cornerRadius=999, без вложенностей.
 function buildStatusBlock(node) {
     const rect = figma.createRectangle();
-    rect.name         = "Skeleton/Status Block";
+    rect.name         = node.name;
     rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
     rect.cornerRadius = 999;
     return rect;
 }
 
-// Logo: прямоугольник #292929, размеры исходника, cornerRadius=16.
 function buildLogo(node) {
     const rect = figma.createRectangle();
-    rect.name         = "Skeleton/Logo";
+    rect.name         = node.name;
     rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
     rect.cornerRadius = 16;
@@ -220,13 +216,14 @@ function buildLogo(node) {
 }
 
 // ---------- ICON ----------
-function buildIconCircle(srcW, srcH) {
+function buildIconCircle(srcW, srcH, name) {
     const w    = Math.max(srcW, 0.01);
     const h    = Math.max(srcH, 0.01);
     const size = snapIconSize(Math.max(w, h));
+    const lbl  = name || "Icon";
 
     const circle = figma.createRectangle();
-    circle.name         = "Skeleton/Content/Icon";
+    circle.name         = lbl;
     circle.resize(size, size);
     circle.cornerRadius = 999;
     circle.fills        = [{ type: "SOLID", color: C_CONTENT }];
@@ -234,7 +231,7 @@ function buildIconCircle(srcW, srcH) {
     if (Math.abs(size - w) < 0.5 && Math.abs(size - h) < 0.5) return circle;
 
     const frame = figma.createFrame();
-    frame.name         = "Skeleton/Content/Icon";
+    frame.name         = lbl;
     frame.resize(w, h);
     frame.fills        = [];
     frame.clipsContent = false;
@@ -266,10 +263,7 @@ async function getTextKind(node) {
     const styleId = node.textStyleId;
     if (typeof styleId === "string" && styleId) {
         const style = await figma.getStyleByIdAsync(styleId);
-        if (style) {
-            const kind = classifyByStyleName(style.name);
-            if (kind) return kind;
-        }
+        if (style) { const kind = classifyByStyleName(style.name); if (kind) return kind; }
     }
     const fontSize = typeof node.fontSize === "number" ? node.fontSize : 14;
     return fontSize >= 20 ? "Large" : "Small";
@@ -297,20 +291,20 @@ async function buildText(node, platform) {
     if (kind === "Large" || kind === "Small") {
         const bh   = kind === "Large" ? largeBarH(platform) : smallBarH(platform);
         const rect = figma.createRectangle();
-        rect.name         = `Skeleton/Content/Text-${kind}`;
+        rect.name         = node.name;
         rect.resize(w, bh);
         rect.cornerRadius = 16;
         rect.fills        = [fill];
         return rect;
     }
 
-    const lines    = countLines(node);
-    const bh       = smallBarH(platform);
-    const gap      = barGap(platform);
+    const lines = countLines(node);
+    const bh    = smallBarH(platform);
+    const gap   = barGap(platform);
 
     if (lines <= 1) {
         const rect = figma.createRectangle();
-        rect.name         = "Skeleton/Content/Text-Paragraph-1L";
+        rect.name         = node.name;
         rect.resize(w, bh);
         rect.cornerRadius = 16;
         rect.fills        = [fill];
@@ -320,14 +314,14 @@ async function buildText(node, platform) {
     const barCount = Math.min(lines, 3);
     const totalH   = barCount * bh + (barCount - 1) * gap;
     const frame    = figma.createFrame();
-    frame.name         = `Skeleton/Content/Text-Paragraph-${barCount}L`;
+    frame.name         = node.name;
     frame.resize(w, Math.max(totalH, 0.01));
     frame.fills        = [];
     frame.clipsContent = false;
 
     for (let i = 0; i < barCount; i++) {
         const bar  = figma.createRectangle();
-        bar.name   = "Skeleton/Content/Line";
+        bar.name   = node.name;
         const barW = barCount === 2
             ? (i === 1 ? w * 0.58 : w)
             : (i === 2 ? w * 0.58 * 0.58 : w);
@@ -348,40 +342,36 @@ async function buildLeaf(node, platform) {
     const w = Math.max(node.width, 0.01);
     const h = Math.max(node.height, 0.01);
 
-    if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE") {
-        return buildIconCircle(node.width, node.height);
-    }
+    if (node.type === "VECTOR" || node.type === "STAR" || node.type === "LINE")
+        return buildIconCircle(node.width, node.height, node.name);
 
     if (node.type === "ELLIPSE") {
         if (Math.max(w, h) > ICON_SCALE_MAX) {
             const rect        = figma.createRectangle();
-            rect.name         = "Skeleton/Content/Avatar";
+            rect.name         = node.name;
             rect.resize(w, h);
             rect.cornerRadius = 999;
             rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
             return rect;
         }
-        return buildIconCircle(node.width, node.height);
+        return buildIconCircle(node.width, node.height, node.name);
     }
 
     const rect  = figma.createRectangle();
+    rect.name   = node.name;
     rect.resize(w, h);
     const fills = await copyFills(node);
     if (fills.length === 0) {
-        rect.name  = "Skeleton/Content/Detail";
         rect.fills = [{ type: "SOLID", color: C_CONTENT }];
     } else {
-        rect.name  = "Skeleton/Surface";
         rect.fills = fills;
     }
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        rect.cornerRadius = node.cornerRadius;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") rect.cornerRadius = node.cornerRadius;
     if (hasStroke(node)) applyStroke(rect, node);
     return rect;
 }
 
-// Stories: detect Stack=on via componentProperties or name.
+// ---------- STORIES ----------
 function hasStackOn(node) {
     const n = node.name.toLowerCase();
     if (n.includes("stack=on") || n.includes("stack on")) return true;
@@ -396,23 +386,21 @@ function hasStackOn(node) {
     return false;
 }
 
-// Stories Stack=on: main card #1F1F1F + 2 offset layers #292929 behind (peeking at right).
 function buildStoriesStackOn(node) {
     const w   = Math.max(node.width, 0.01);
     const h   = Math.max(node.height, 0.01);
-    const off = 6; // px offset per layer
+    const off = 6;
     const cr  = "cornerRadius" in node && typeof node.cornerRadius === "number" ? node.cornerRadius : 0;
 
     const outer = figma.createFrame();
-    outer.name         = "Skeleton/Stories/Stack";
+    outer.name         = node.name;
     outer.resize(w + off * 2, h);
     outer.fills        = [];
     outer.clipsContent = false;
 
-    // Stack layers (behind, appended first → rendered below main)
     for (let i = 2; i >= 1; i--) {
         const layer = figma.createRectangle();
-        layer.name         = "Skeleton/Stories/Layer";
+        layer.name         = node.name;
         layer.resize(w, h);
         layer.fills        = [{ type: "SOLID", color: C_CONTENT }];
         layer.cornerRadius = cr;
@@ -420,32 +408,27 @@ function buildStoriesStackOn(node) {
         layer.y            = 0;
         outer.appendChild(layer);
     }
-
-    // Main card (front)
     const main = figma.createRectangle();
-    main.name         = "Skeleton/Stories/Main";
+    main.name         = node.name;
     main.resize(w, h);
     main.fills        = [{ type: "SOLID", color: C_SURFACE }];
     main.cornerRadius = cr;
     main.x            = 0;
     main.y            = 0;
     outer.appendChild(main);
-
     return outer;
 }
 
-// Stories Stack=off: stroke #333333, no fill, recurse children normally.
 async function buildStoriesStackOff(node, platform) {
     const frame = figma.createFrame();
-    frame.name         = "Skeleton/Stories";
+    frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     frame.fills        = [];
     frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
     frame.strokeWeight = 1;
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        frame.cornerRadius = node.cornerRadius;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
     frame.clipsContent = "clipsContent" in node ? node.clipsContent : true;
+    const hasAL = applyAutoLayout(frame, node);
 
     if ("children" in node) {
         for (const child of node.children) {
@@ -453,14 +436,14 @@ async function buildStoriesStackOff(node, platform) {
             const built = await build(child, platform);
             if (!built) continue;
             frame.appendChild(built);
-            built.x = child.x;
-            built.y = child.y;
+            if (hasAL) applyChildLayoutSizing(built, child);
+            else { built.x = child.x; built.y = child.y; }
         }
     }
     return frame;
 }
 
-// Random Game detection: check componentProperties or node name.
+// ---------- CATEGORY BUTTON SLIDER ----------
 function isRandomGame(node) {
     const n = node.name.toLowerCase();
     if (n.includes("random game") || n.includes("random")) return true;
@@ -473,16 +456,14 @@ function isRandomGame(node) {
     return false;
 }
 
-// Category Button Slider: Random Game → fill #1F1F1F; Other → no fill. Only icon + text.
 async function buildCatBtnSlider(node, platform) {
     const frame = figma.createFrame();
-    frame.name         = "Skeleton/Category Button Slider";
+    frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     frame.fills        = isRandomGame(node) ? [{ type: "SOLID", color: C_SURFACE }] : [];
-    if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
-        frame.cornerRadius = node.cornerRadius;
-    }
+    if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
     frame.clipsContent = "clipsContent" in node ? node.clipsContent : true;
+    const hasAL = applyAutoLayout(frame, node);
 
     if ("children" in node) {
         for (const child of node.children) {
@@ -491,11 +472,11 @@ async function buildCatBtnSlider(node, platform) {
             const isIcon = child.type === "VECTOR" || child.type === "STAR" || child.type === "LINE"
                         || child.type === "ELLIPSE" || isIconScaleContainer(child);
             if (!isText && !isIcon) continue;
-            const built = isText ? await buildText(child, platform) : buildIconCircle(child.width, child.height);
+            const built = isText ? await buildText(child, platform) : buildIconCircle(child.width, child.height, child.name);
             if (!built) continue;
             frame.appendChild(built);
-            built.x = child.x;
-            built.y = child.y;
+            if (hasAL) applyChildLayoutSizing(built, child);
+            else { built.x = child.x; built.y = child.y; }
         }
     }
     return frame;
@@ -505,17 +486,16 @@ async function buildCatBtnSlider(node, platform) {
 async function build(node, platform) {
     if (node.visible === false) return null;
 
-    // --- Специальные компоненты по имени (порядок важен: более специфичные — первыми) ---
-    if (nameIs(node, NAME_DIVIDER))      return buildDivider(node);
-    if (nameIs(node, NAME_STATUS_BLOCK)) return buildStatusBlock(node);
-    if (nameIs(node, NAME_LOGO_BADGE))   return buildLogoBadge(node);
-    if (nameIs(node, NAME_PAY_METHOD))   return buildPayMethod(node);
-    if (nameIs(node, NAME_LOGO))          return buildLogo(node);
-    if (nameIs(node, NAME_BUTTON))        return buildButton(node, platform);
-    if (nameIs(node, NAME_STORIES))       return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
+    if (nameIs(node, NAME_DIVIDER))        return buildDivider(node);
+    if (nameIs(node, NAME_STATUS_BLOCK))   return buildStatusBlock(node);
+    if (nameIs(node, NAME_LOGO_BADGE))     return buildLogoBadge(node);
+    if (nameIs(node, NAME_PAY_METHOD))     return buildPayMethod(node);
+    if (nameIs(node, NAME_LOGO))           return buildLogo(node);
+    if (nameIs(node, NAME_BUTTON))         return buildButton(node, platform);
+    if (nameIs(node, NAME_STORIES))        return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
     if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node, platform);
 
-    if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
+    if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height, node.name);
 
     if (!("children" in node) || node.children.length === 0) {
         return buildLeaf(node, platform);
@@ -524,28 +504,24 @@ async function build(node, platform) {
     const src   = node;
     const frame = figma.createFrame();
     frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
+    frame.name  = src.name;
 
     const fills = await copyFills(node);
     frame.fills = fills;
-    frame.name  = fills.length > 0 ? "Skeleton/Surface/Container" : "Skeleton/Container";
 
-    if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
-        frame.cornerRadius = src.cornerRadius;
-    }
-    if (hasStroke(node) || nameIs(node, NAME_PLAY_WIN)) {
-        applyStroke(frame, node);
-    }
+    if ("cornerRadius" in src && typeof src.cornerRadius === "number") frame.cornerRadius = src.cornerRadius;
+    if (hasStroke(node) || nameIs(node, NAME_PLAY_WIN)) applyStroke(frame, node);
     frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
+
+    const hasAL = applyAutoLayout(frame, src);
 
     for (const child of src.children) {
         if (child.visible === false) continue;
-
         const built = await build(child, platform);
         if (built === null) continue;
-
         frame.appendChild(built);
-        built.x = child.x;
-        built.y = child.y;
+        if (hasAL) applyChildLayoutSizing(built, child);
+        else { built.x = child.x; built.y = child.y; }
     }
     return frame;
 }
@@ -567,13 +543,8 @@ figma.ui.onmessage = async (msg) => {
         if (!root) continue;
         figma.currentPage.appendChild(root);
         const box = source.absoluteBoundingBox;
-        if (box) {
-            root.x = box.x + box.width + 80;
-            root.y = box.y;
-        } else {
-            root.x = source.x + source.width + 80;
-            root.y = source.y;
-        }
+        if (box) { root.x = box.x + box.width + 80; root.y = box.y; }
+        else      { root.x = source.x + source.width + 80; root.y = source.y; }
         placed.push(root);
     }
 
