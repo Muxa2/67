@@ -1,43 +1,29 @@
 // code.ts — Skeleton Generator (Ghost Frames principle)
 //
-// Конвертирует ЛЮБОЙ выделенный Frame/Instance/Group в Skeleton Loading State.
-// Без компонентов, переменных и зависимостей от дизайн-системы.
+// СПЕЦИАЛЬНЫЕ ПРАВИЛА ПО ИМЕНИ КОМПОНЕНТА:
+//   divider / separator  → оригинальный вид без изменений
+//   logo badge           → пустой контейнер только с обводкой #333333
+//   pay method logo      → заливка #1F1F1F, без контента внутри
 //
-// ЛОГИКА:
-//   Контейнеры (Frame/Instance/Group с дочерними элементами):
-//     — сохраняют оригинальный фон (background primary, secondary и т.д.)
-//     — IMAGE-заливки заменяются на Content #292929
-//   Листья:
-//     — TEXT          → серые полосы #292929 по спецификации
-//     — VECTOR/ICON   → круг #292929 (снап к 12/16/20/24/32)
-//     — ELLIPSE крупная → аватар-круг #292929
-//     — RECTANGLE/прочие → оригинальный фон; IMAGE → #292929
-//   Скрытые слои (visible=false) → пропускаются полностью.
-//   Все размеры и отступы сохраняются 1:1 с исходным макетом.
+// СПЕЦИАЛЬНЫЕ ПРАВИЛА ПО ЦВЕТ-СТИЛЮ ЗАЛИВКИ:
+//   yellow / red / purple в имени стиля → заменяется на #292929
 //
-// TEXT (#292929, cornerRadius=16):
-//   Large  (Accent-1/2/3, Heading-1/2):       Desktop h=16 / Mobile h=12
-//   Small  (Accent-4, Heading-3/4, Body-1…):   Desktop h=12 / Mobile h=8
-//   Paragraph (Body-2, Label-1/2, Button-*):
-//     1 строка → как Small
-//     2 строки → [100%] + gap + [58%]
-//     3+ строк  → [100%] + gap + [100%] + gap + [~34%]
-//     gap: Desktop=4 / Mobile=2
-//
-// ICON (#292929, cornerRadius=999): снап к 12/16/20/24/32, центр в footprint исходника.
-// STROKE: #333333, толщина из исходника.
+// ОБЩИЕ ПРАВИЛА:
+//   Контейнеры (с дочерними элементами) — сохраняют оригинальный фон
+//   TEXT  → серые полосы #292929 по спецификации
+//   ICON  → круг #292929 (снап к 12/16/20/24/32)
+//   IMAGE → плейсхолдер #292929
+//   Скрытые слои (visible=false) → пропускаются
+//   Все размеры и отступы — 1:1 с исходным макетом
 
 figma.showUI(__html__, { width: 320, height: 460 });
-
-// ============================================================
-// HELPERS
-// ============================================================
 
 function hex(h: string): RGB {
   const v = parseInt(h.replace("#", ""), 16);
   return { r: ((v >> 16) & 255) / 255, g: ((v >> 8) & 255) / 255, b: (v & 255) / 255 };
 }
 
+const C_SURFACE = hex("#1F1F1F");
 const C_CONTENT = hex("#292929");
 const C_STROKE  = hex("#333333");
 
@@ -46,6 +32,25 @@ type TextKind  = "Large" | "Small" | "Paragraph";
 
 const ICON_SIZES     = [12, 16, 20, 24, 32];
 const ICON_SCALE_MAX = 32;
+
+// ============================================================
+// NAME MATCHING
+// ============================================================
+
+const NAME_DIVIDER    = ["divider", "дивайдер", "separator", "dividers"];
+const NAME_LOGO_BADGE = ["logo badge", "logo-badge", "logobadge"];
+const NAME_PAY_METHOD = ["pay method logo", "pay-method-logo", "payment logo", "pay method"];
+
+function nameIs(node: SceneNode, keywords: string[]): boolean {
+  const n = node.name.toLowerCase();
+  return keywords.some((k) => n.includes(k));
+}
+
+// ============================================================
+// FILL HELPERS
+// ============================================================
+
+const FILL_STYLE_REPLACE = ["yellow", "red", "purple"];
 
 function hasVisibleFill(node: SceneNode): boolean {
   if (!("fills" in node) || !Array.isArray(node.fills)) return false;
@@ -69,15 +74,85 @@ function applyStroke(target: FrameNode | RectangleNode, source: SceneNode) {
   target.strokeWeight = w > 0 ? w : 1;
 }
 
-// Копирует заливки из исходника: IMAGE-заливки → Content #292929 (картинки не копируем).
-function copyFills(node: SceneNode): Paint[] {
+async function fillColorNeedsReplacement(node: SceneNode): Promise<boolean> {
+  if (!("fillStyleId" in node)) return false;
+  const id = (node as MinimalFillsMixin).fillStyleId;
+  if (typeof id !== "string" || !id) return false;
+  const style = await figma.getStyleByIdAsync(id);
+  if (!style) return false;
+  const name = style.name.toLowerCase();
+  return FILL_STYLE_REPLACE.some((k) => name.includes(k));
+}
+
+// Копирует заливки из исходника.
+// Если цвет-стиль из списка (yellow/red/purple) → #292929.
+// IMAGE → #292929.
+async function copyFills(node: SceneNode): Promise<Paint[]> {
   if (!("fills" in node) || !Array.isArray(node.fills)) return [];
+  const replaceColor = await fillColorNeedsReplacement(node);
   return (node.fills as Paint[])
     .filter((f) => f.visible !== false)
-    .map((f): Paint =>
-      f.type === "IMAGE" ? { type: "SOLID", color: C_CONTENT } : f,
-    );
+    .map((f): Paint => {
+      if (replaceColor) return { type: "SOLID", color: C_CONTENT };
+      if (f.type === "IMAGE") return { type: "SOLID", color: C_CONTENT };
+      return f;
+    });
 }
+
+// Копирует заливки без каких-либо замен (для divider).
+function copyFillsVerbatim(node: SceneNode): Paint[] {
+  if (!("fills" in node) || !Array.isArray(node.fills)) return [];
+  return (node.fills as Paint[]).filter((f) => f.visible !== false);
+}
+
+// ============================================================
+// SPECIAL BUILDERS
+// ============================================================
+
+function buildDivider(node: SceneNode): RectangleNode {
+  const rect = figma.createRectangle();
+  rect.name   = node.name;
+  rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  rect.fills  = copyFillsVerbatim(node);
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    rect.cornerRadius = node.cornerRadius;
+  }
+  if (hasStroke(node)) {
+    rect.strokes      = (node as GeometryMixin).strokes.slice() as Paint[];
+    rect.strokeWeight = ("strokeWeight" in node ? node.strokeWeight as number : 1) || 1;
+  }
+  return rect;
+}
+
+function buildLogoBadge(node: SceneNode): FrameNode {
+  const frame = figma.createFrame();
+  frame.name         = "Skeleton/Logo Badge";
+  frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  frame.fills        = [];
+  frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
+  frame.strokeWeight = 1;
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    frame.cornerRadius = node.cornerRadius;
+  }
+  frame.clipsContent = false;
+  return frame;
+}
+
+function buildPayMethod(node: SceneNode): FrameNode {
+  const frame = figma.createFrame();
+  frame.name         = "Skeleton/Pay Method";
+  frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+  frame.fills        = [{ type: "SOLID", color: C_SURFACE }];
+  if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
+    frame.cornerRadius = node.cornerRadius;
+  }
+  frame.clipsContent = false;
+  return frame;
+}
+
+// ============================================================
+// ICON
+// ============================================================
 
 function snapIconSize(actual: number): number {
   let best = ICON_SIZES[0];
@@ -88,18 +163,6 @@ function snapIconSize(actual: number): number {
   }
   return best;
 }
-
-// ============================================================
-// PLATFORM
-// ============================================================
-
-function detectPlatform(rootWidth: number): Platform {
-  return rootWidth <= 480 ? "Mobile" : "Desktop";
-}
-
-// ============================================================
-// ICON
-// ============================================================
 
 function buildIconCircle(srcW: number, srcH: number): SceneNode {
   const w    = Math.max(srcW, 0.01);
@@ -253,11 +316,9 @@ async function buildLeaf(node: SceneNode, platform: Platform): Promise<SceneNode
     return buildIconCircle(node.width, node.height);
   }
 
-  // RECTANGLE и прочие листья — сохраняем оригинальный фон.
-  // IMAGE-заливки → Content #292929 (картинку не отображаем).
   const rect  = figma.createRectangle();
   rect.resize(w, h);
-  const fills = copyFills(node);
+  const fills = await copyFills(node);
   if (fills.length === 0) {
     rect.name  = "Skeleton/Content/Detail";
     rect.fills = [{ type: "SOLID", color: C_CONTENT }];
@@ -276,9 +337,17 @@ async function buildLeaf(node: SceneNode, platform: Platform): Promise<SceneNode
 // RECURSION — Ghost Frames
 // ============================================================
 
+function detectPlatform(rootWidth: number): Platform {
+  return rootWidth <= 480 ? "Mobile" : "Desktop";
+}
+
 async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
-  // Скрытые слои полностью пропускаются
   if (node.visible === false) return null;
+
+  // Специальные компоненты по имени — приоритет перед всем остальным
+  if (nameIs(node, NAME_DIVIDER))    return buildDivider(node);
+  if (nameIs(node, NAME_LOGO_BADGE)) return buildLogoBadge(node);
+  if (nameIs(node, NAME_PAY_METHOD)) return buildPayMethod(node);
 
   if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
 
@@ -291,8 +360,7 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   const frame = figma.createFrame();
   frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
 
-  // Контейнеры сохраняют оригинальный фон (background primary/secondary и т.д.)
-  const fills = copyFills(node);
+  const fills = await copyFills(node);
   frame.fills = fills;
   frame.name  = fills.length > 0 ? "Skeleton/Surface/Container" : "Skeleton/Container";
 
@@ -303,7 +371,7 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
 
   for (const child of src.children) {
-    if (child.visible === false) continue; // скрытые дочерние слои пропускаем
+    if (child.visible === false) continue;
 
     const built = await build(child, platform);
     if (built === null) continue;
