@@ -583,32 +583,16 @@ function isRandomGame(node: SceneNode): boolean {
   return false;
 }
 
-async function buildCatBtnSlider(node: SceneNode, platform: Platform): Promise<FrameNode> {
+function buildCatBtnSlider(node: SceneNode): FrameNode {
   const frame = figma.createFrame();
   frame.name         = node.name;
   frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
   frame.fills        = [];
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
-  frame.clipsContent = "clipsContent" in node ? (node as FrameNode).clipsContent : true;
-  const hasAL = applyAutoLayout(frame, node);
-
-  if ("children" in node) {
-    for (const child of (node as ChildrenMixin).children) {
-      if (child.visible === false || isAbsolutePos(child)) continue;
-      const isText = child.type === "TEXT";
-      const isIcon = child.type === "VECTOR" || child.type === "STAR" || child.type === "LINE"
-                  || child.type === "ELLIPSE" || isIconScaleContainer(child);
-      if (!isText && !isIcon) continue;
-      const built: SceneNode = isText
-        ? await buildText(child as TextNode, platform)
-        : buildIconCircle(child.width, child.height, child.name);
-      frame.appendChild(built);
-      if (hasAL) applyChildLayoutSizing(built, child);
-      else { built.x = child.x; built.y = child.y; }
-    }
-  }
+  frame.clipsContent = false;
   return frame;
 }
+
 
 // ============================================================
 // RECURSION — Ghost Frames
@@ -629,7 +613,7 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   if (nameIs(node, NAME_BUTTON))         return buildButton(node, platform);
   if (nameIs(node, NAME_LINK))           return buildLink(node, platform);
   if (nameIs(node, NAME_STORIES))        return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
-  if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node, platform);
+  if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node);
 
   if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height, node.name);
 

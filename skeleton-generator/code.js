@@ -519,29 +519,13 @@ function isRandomGame(node) {
     return false;
 }
 
-async function buildCatBtnSlider(node, platform) {
+function buildCatBtnSlider(node) {
     const frame = figma.createFrame();
     frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
     frame.fills        = [];
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
-    frame.clipsContent = "clipsContent" in node ? node.clipsContent : true;
-    const hasAL = applyAutoLayout(frame, node);
-
-    if ("children" in node) {
-        for (const child of node.children) {
-            if (child.visible === false || isAbsolutePos(child)) continue;
-            const isText = child.type === "TEXT";
-            const isIcon = child.type === "VECTOR" || child.type === "STAR" || child.type === "LINE"
-                        || child.type === "ELLIPSE" || isIconScaleContainer(child);
-            if (!isText && !isIcon) continue;
-            const built = isText ? await buildText(child, platform) : buildIconCircle(child.width, child.height, child.name);
-            if (!built) continue;
-            frame.appendChild(built);
-            if (hasAL) applyChildLayoutSizing(built, child);
-            else { built.x = child.x; built.y = child.y; }
-        }
-    }
+    frame.clipsContent = false;
     return frame;
 }
 
