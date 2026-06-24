@@ -26,6 +26,7 @@ const NAME_LOGO         = ["logo"];
 const NAME_STORIES      = ["stories"];
 const NAME_LINK           = ["link"];
 const NAME_BADGE          = ["badge"];
+const NAME_AVATARS        = ["avatars"];
 const NAME_CAT_BTN_SLIDER = ["category button slider"];
 const NAME_PLAY_WIN     = ["play & win", "play&win", "play and win"];
 
@@ -460,6 +461,18 @@ async function buildStoriesStackOff(node, platform) {
     return frame;
 }
 
+// ---------- AVATARS ----------
+function buildAvatars(node) {
+    const rect = figma.createRectangle();
+    rect.name         = node.name;
+    rect.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
+    rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
+    rect.strokes      = [{ type: "SOLID", color: C_STROKE }];
+    rect.strokeWeight = 1;
+    rect.cornerRadius = 999;
+    return rect;
+}
+
 // ---------- LINK ----------
 async function buildLink(node, platform) {
     const frame = figma.createFrame();
@@ -539,6 +552,7 @@ async function build(node, platform) {
     if (isAbsolutePos(node)) return null;
     if (isImageNode(node)) return null;
     if (nameIs(node, NAME_BADGE)) return null;
+    if (nameIs(node, NAME_AVATARS))        return buildAvatars(node);
 
     if (nameIs(node, NAME_DIVIDER))        return buildDivider(node);
     if (nameIs(node, NAME_STATUS_BLOCK))   return buildStatusBlock(node);
