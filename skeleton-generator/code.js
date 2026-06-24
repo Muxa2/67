@@ -301,13 +301,11 @@ async function buildText(node, platform) {
     let w = Math.max(node.width, 0.01);
     const fill = { type: "SOLID", color: C_CONTENT };
 
-    // DEBUG: show style name for Large text nodes
-    if (kind === "Large") {
-        figma.notify("H2 debug | styleName: " + (styleName || "(empty)") + " | node: " + node.name, { timeout: 8000 });
-    }
-
     // Heading-2: fixed size (Desktop 204×16, Mobile 106×16)
-    if (kind === "Large" && styleName.includes("Heading-2")) {
+    // Style name in this design is "Heading/H2"
+    const sn = styleName.toLowerCase();
+    const isH2 = sn.includes("/h2") || sn.includes("heading-2") || sn.includes("heading 2");
+    if (kind === "Large" && isH2) {
         const rect = figma.createRectangle();
         rect.name         = node.name;
         rect.resize(platform === "Desktop" ? 204 : 106, 16);

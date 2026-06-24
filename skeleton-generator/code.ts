@@ -350,7 +350,10 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
   const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
 
   // Heading-2: fixed size (Desktop 204×16, Mobile 106×16)
-  if (kind === "Large" && styleName.includes("Heading-2")) {
+  // Style name in this design is "Heading/H2"
+  const sn = styleName.toLowerCase();
+  const isH2 = sn.includes("/h2") || sn.includes("heading-2") || sn.includes("heading 2");
+  if (kind === "Large" && isH2) {
     const rect = figma.createRectangle();
     rect.name         = node.name;
     rect.resize(platform === "Desktop" ? 204 : 106, 16);
