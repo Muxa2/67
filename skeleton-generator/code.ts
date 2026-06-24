@@ -328,8 +328,17 @@ function countLines(node: TextNode): number {
 
 async function buildText(node: TextNode, platform: Platform): Promise<SceneNode> {
   const kind = await getTextKind(node);
-  const w    = Math.max(node.width, 0.01);
+  let w = Math.max(node.width, 0.01);
   const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
+
+  // Heading-2: max display width 164px
+  if (kind === "Large") {
+    const styleId = node.textStyleId;
+    if (typeof styleId === "string" && styleId) {
+      const style = await figma.getStyleByIdAsync(styleId);
+      if (style && style.name.includes("Heading-2")) w = Math.min(w, 164);
+    }
+  }
 
   if (kind === "Large" || kind === "Small") {
     const bh   = kind === "Large" ? largeBarH(platform) : smallBarH(platform);
