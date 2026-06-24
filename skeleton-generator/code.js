@@ -23,7 +23,8 @@ const NAME_PAY_METHOD   = ["pay method logo", "pay-method-logo", "payment logo",
 const NAME_BUTTON       = ["button"];
 const NAME_STATUS_BLOCK = ["status-block", "status block", "statusblock"];
 const NAME_LOGO         = ["logo"];
-const NAME_STORIES      = ["stories"];
+const NAME_STORIES_CONTAINER = ["stories-container"];
+const NAME_STORIES           = ["stories"];
 const NAME_LINK           = ["link"];
 const NAME_BADGE          = ["badge"];
 const NAME_AVATARS        = ["avatars"];
@@ -399,54 +400,7 @@ async function buildLeaf(node, platform) {
 }
 
 // ---------- STORIES ----------
-function hasStackOn(node) {
-    const n = node.name.toLowerCase();
-    if (n.includes("stack=on") || n.includes("stack on")) return true;
-    if ("componentProperties" in node && node.componentProperties) {
-        for (const key of Object.keys(node.componentProperties)) {
-            if (key.toLowerCase().includes("stack")) {
-                const prop = node.componentProperties[key];
-                if (prop && typeof prop.value === "string" && prop.value.toLowerCase() === "on") return true;
-            }
-        }
-    }
-    return false;
-}
-
-function buildStoriesStackOn(node) {
-    const w   = Math.max(node.width, 0.01);
-    const h   = Math.max(node.height, 0.01);
-    const off = 6;
-    const cr  = "cornerRadius" in node && typeof node.cornerRadius === "number" ? node.cornerRadius : 0;
-
-    const outer = figma.createFrame();
-    outer.name         = node.name;
-    outer.resize(w + off * 2, h);
-    outer.fills        = [];
-    outer.clipsContent = false;
-
-    for (let i = 2; i >= 1; i--) {
-        const layer = figma.createRectangle();
-        layer.name         = node.name;
-        layer.resize(w, h);
-        layer.fills        = [{ type: "SOLID", color: C_CONTENT }];
-        layer.cornerRadius = cr;
-        layer.x            = off * i;
-        layer.y            = 0;
-        outer.appendChild(layer);
-    }
-    const main = figma.createRectangle();
-    main.name         = node.name;
-    main.resize(w, h);
-    main.fills        = [{ type: "SOLID", color: C_SURFACE }];
-    main.cornerRadius = cr;
-    main.x            = 0;
-    main.y            = 0;
-    outer.appendChild(main);
-    return outer;
-}
-
-async function buildStoriesStackOff(node, platform) {
+function buildStories(node) {
     const frame = figma.createFrame();
     frame.name         = node.name;
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
@@ -454,19 +408,7 @@ async function buildStoriesStackOff(node, platform) {
     frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
     frame.strokeWeight = 1;
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") frame.cornerRadius = node.cornerRadius;
-    frame.clipsContent = "clipsContent" in node ? node.clipsContent : true;
-    const hasAL = applyAutoLayout(frame, node);
-
-    if ("children" in node) {
-        for (const child of node.children) {
-            if (child.visible === false || isAbsolutePos(child)) continue;
-            const built = await build(child, platform);
-            if (!built) continue;
-            frame.appendChild(built);
-            if (hasAL) applyChildLayoutSizing(built, child);
-            else { built.x = child.x; built.y = child.y; }
-        }
-    }
+    frame.clipsContent = false;
     return frame;
 }
 
@@ -555,7 +497,8 @@ async function build(node, platform) {
     if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node);
     if (nameIs(node, NAME_BUTTON))         return buildButton(node, platform);
     if (nameIs(node, NAME_LINK))           return buildLink(node, platform);
-    if (nameIs(node, NAME_STORIES))        return hasStackOn(node) ? buildStoriesStackOn(node) : buildStoriesStackOff(node, platform);
+    if (nameIs(node, NAME_STORIES_CONTAINER)) { /* fall through to generic build without stroke */ }
+    else if (nameIs(node, NAME_STORIES))   return buildStories(node);
 
     if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height, node.name);
 
@@ -572,7 +515,7 @@ async function build(node, platform) {
     frame.fills = fills;
 
     if ("cornerRadius" in src && typeof src.cornerRadius === "number") frame.cornerRadius = src.cornerRadius;
-    if (hasStroke(node) || nameIs(node, NAME_PLAY_WIN)) applyStroke(frame, node);
+    if (!nameIs(node, NAME_STORIES_CONTAINER) && (hasStroke(node) || nameIs(node, NAME_PLAY_WIN))) applyStroke(frame, node);
     frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
 
     const hasAL = applyAutoLayout(frame, src);
