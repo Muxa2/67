@@ -88,6 +88,11 @@ function applyAutoLayout(frame, src) {
 // Apply child layout sizing properties when the parent has Auto Layout.
 function applyChildLayoutSizing(built, srcChild) {
     try {
+        if (srcChild.type === "TEXT") {
+            built.layoutSizingHorizontal = "FILL";
+            if ("layoutSizingVertical" in srcChild) built.layoutSizingVertical = srcChild.layoutSizingVertical;
+            return;
+        }
         if ("layoutSizingHorizontal" in srcChild) built.layoutSizingHorizontal = srcChild.layoutSizingHorizontal;
         if ("layoutSizingVertical"   in srcChild) built.layoutSizingVertical   = srcChild.layoutSizingVertical;
         if ("layoutAlign" in srcChild) built.layoutAlign = srcChild.layoutAlign;

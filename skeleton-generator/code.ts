@@ -110,6 +110,11 @@ function applyChildLayoutSizing(built: SceneNode, srcChild: SceneNode): void {
   try {
     const s = srcChild as any;
     const b = built as any;
+    if (srcChild.type === "TEXT") {
+      b.layoutSizingHorizontal = "FILL";
+      if ("layoutSizingVertical" in s) b.layoutSizingVertical = s.layoutSizingVertical;
+      return;
+    }
     if ("layoutSizingHorizontal" in s) b.layoutSizingHorizontal = s.layoutSizingHorizontal;
     if ("layoutSizingVertical"   in s) b.layoutSizingVertical   = s.layoutSizingVertical;
     if ("layoutAlign" in s) b.layoutAlign = s.layoutAlign;
