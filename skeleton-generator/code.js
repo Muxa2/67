@@ -92,8 +92,8 @@ function applyAutoLayout(frame, src) {
 function applyChildLayoutSizing(built, srcChild) {
     try {
         if (srcChild.type === "TEXT") {
-            if ("layoutSizingHorizontal" in srcChild) built.layoutSizingHorizontal = srcChild.layoutSizingHorizontal;
-            else built.layoutSizingHorizontal = "FILL";
+            const isFixed = "getPluginData" in built && built.getPluginData("skeletonFixedSize") === "1";
+            built.layoutSizingHorizontal = isFixed ? "FIXED" : "FILL";
             if ("layoutSizingVertical" in srcChild) built.layoutSizingVertical = srcChild.layoutSizingVertical;
             return;
         }
@@ -308,6 +308,7 @@ async function buildText(node, platform) {
         rect.resize(platform === "Desktop" ? 204 : 106, 16);
         rect.cornerRadius = 16;
         rect.fills        = [fill];
+        rect.setPluginData("skeletonFixedSize", "1");
         return rect;
     }
 

@@ -124,8 +124,8 @@ function applyChildLayoutSizing(built: SceneNode, srcChild: SceneNode): void {
     const s = srcChild as any;
     const b = built as any;
     if (srcChild.type === "TEXT") {
-      if ("layoutSizingHorizontal" in s) b.layoutSizingHorizontal = s.layoutSizingHorizontal;
-      else b.layoutSizingHorizontal = "FILL";
+      const isFixed = "getPluginData" in built && (built as any).getPluginData("skeletonFixedSize") === "1";
+      b.layoutSizingHorizontal = isFixed ? "FIXED" : "FILL";
       if ("layoutSizingVertical" in s) b.layoutSizingVertical = s.layoutSizingVertical;
       return;
     }
@@ -356,6 +356,7 @@ async function buildText(node: TextNode, platform: Platform): Promise<SceneNode>
     rect.resize(platform === "Desktop" ? 204 : 106, 16);
     rect.cornerRadius = 16;
     rect.fills        = [fill];
+    rect.setPluginData("skeletonFixedSize", "1");
     return rect;
   }
 
