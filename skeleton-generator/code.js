@@ -76,6 +76,34 @@ function copyFillsVerbatim(node) {
     return node.fills.filter((f) => f.visible !== false);
 }
 
+// Копирует Auto Layout на frame с FIXED размером (не меняет размер фрейма).
+// Возвращает true если AL был применён (дочерние x/y в этом случае игнорируем).
+function applyAutoLayout(frame, src) {
+    if (!("layoutMode" in src) || src.layoutMode === "NONE") return false;
+    frame.layoutMode            = src.layoutMode;
+    frame.primaryAxisAlignItems = src.primaryAxisAlignItems || "MIN";
+    frame.counterAxisAlignItems = src.counterAxisAlignItems || "MIN";
+    frame.primaryAxisSizingMode = "FIXED";
+    frame.counterAxisSizingMode = "FIXED";
+    frame.paddingTop    = src.paddingTop    || 0;
+    frame.paddingBottom = src.paddingBottom || 0;
+    frame.paddingLeft   = src.paddingLeft   || 0;
+    frame.paddingRight  = src.paddingRight  || 0;
+    frame.itemSpacing   = src.itemSpacing   || 0;
+    return true;
+}
+
+// Получает значение свойства компонента (для различия вариантов).
+function getInstanceProp(node, propKey) {
+    if (node.type !== "INSTANCE" || !node.componentProperties) return null;
+    for (const key of Object.keys(node.componentProperties)) {
+        if (key.toLowerCase().startsWith(propKey.toLowerCase())) {
+            return String(node.componentProperties[key].value).toLowerCase();
+        }
+    }
+    return null;
+}
+
 // ---------- SNAP ICON ----------
 function snapIconSize(actual) {
     let best = ICON_SIZES[0];
@@ -139,8 +167,8 @@ function buildPayMethod(node) {
     return frame;
 }
 
-// Button/Link: заливка #1F1F1F (link — без заливки), Auto Layout из исходника (центрование).
-async function buildButton(node, platform, noFill = false) {
+// Button/Link: Auto Layout из исходника (центрование). Без AL → ставим CENTER.
+async function buildButton(node, platform, noFill) {
     const frame = figma.createFrame();
     frame.name         = noFill ? "Skeleton/Link" : "Skeleton/Button";
     frame.resize(Math.max(node.width, 0.01), Math.max(node.height, 0.01));
@@ -148,10 +176,10 @@ async function buildButton(node, platform, noFill = false) {
     if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
         frame.cornerRadius = node.cornerRadius;
     }
-    if (hasStroke(node)) applyStroke(frame, node);
+    if (!noFill && hasStroke(node)) applyStroke(frame, node);
     const hasAL = applyAutoLayout(frame, node);
     if (!hasAL) {
-        // Нет Auto Layout — ставим горизонтальный центр вручную
+        // Центрируем содержимое если нет Auto Layout в исходнике
         frame.layoutMode            = "HORIZONTAL";
         frame.primaryAxisAlignItems = "CENTER";
         frame.counterAxisAlignItems = "CENTER";
@@ -166,10 +194,7 @@ async function buildButton(node, platform, noFill = false) {
             const built = await buildButtonContent(child, platform);
             if (!built) continue;
             frame.appendChild(built);
-            if (!hasAL) {
-                built.x = child.x;
-                built.y = child.y;
-            }
+            if (!hasAL) { built.x = child.x; built.y = child.y; }
         }
     }
     return frame;
@@ -201,7 +226,7 @@ async function buildStories(node, platform) {
     return frame;
 }
 
-// Category Button Slider: recurse normally, только fill задаётся снаружи.
+// Category Button Slider: recurse normally, fill задаётся по варианту.
 async function buildCategoryBtn(node, platform, withFill) {
     const frame = figma.createFrame();
     frame.name         = "Skeleton/Category Button";
@@ -280,41 +305,6 @@ function buildLogo(node) {
     rect.fills        = [{ type: "SOLID", color: C_CONTENT }];
     rect.cornerRadius = 16;
     return rect;
-}
-
-// Возвращает значение свойства компонента по части имени ключа (регистронезависимо).
-function getInstanceProp(node, propKey) {
-    if (node.type !== "INSTANCE" || !node.componentProperties) return null;
-    for (const key of Object.keys(node.componentProperties)) {
-        if (key.toLowerCase().startsWith(propKey.toLowerCase())) {
-            return String(node.componentProperties[key].value).toLowerCase();
-        }
-    }
-    return null;
-}
-
-// Возвращает полное имя (включая вариант для Instance, через mainComponent.name).
-function fullNodeName(node) {
-    if (node.type === "INSTANCE" && node.mainComponent) {
-        return (node.mainComponent.name || node.name).toLowerCase();
-    }
-    return node.name.toLowerCase();
-}
-
-// Копирует Auto Layout из исходника на новый фрейм (фиксированный размер).
-function applyAutoLayout(frame, src) {
-    if (!("layoutMode" in src) || src.layoutMode === "NONE") return false;
-    frame.layoutMode            = src.layoutMode;
-    frame.primaryAxisAlignItems = src.primaryAxisAlignItems  || "MIN";
-    frame.counterAxisAlignItems = src.counterAxisAlignItems  || "MIN";
-    frame.primaryAxisSizingMode = "FIXED";
-    frame.counterAxisSizingMode = "FIXED";
-    frame.paddingTop    = src.paddingTop    || 0;
-    frame.paddingBottom = src.paddingBottom || 0;
-    frame.paddingLeft   = src.paddingLeft   || 0;
-    frame.paddingRight  = src.paddingRight  || 0;
-    frame.itemSpacing   = src.itemSpacing   || 0;
-    return true;
 }
 
 // ---------- ICON ----------
@@ -483,7 +473,7 @@ async function buildLeaf(node, platform) {
 async function build(node, platform) {
     if (node.visible === false) return null;
 
-    // --- Специальные компоненты по имени (более специфичные — первыми) ---
+    // --- Специальные компоненты (более специфичные — первыми) ---
     if (nameIs(node, NAME_DIVIDER))      return buildDivider(node);
     if (nameIs(node, NAME_STATUS_BLOCK)) return buildStatusBlock(node);
     if (nameIs(node, NAME_LOGO_BADGE))   return buildLogoBadge(node);
@@ -493,23 +483,12 @@ async function build(node, platform) {
     if (nameIs(node, NAME_LINK))         return buildButton(node, platform, true);
     if (nameIs(node, NAME_BUTTON))       return buildButton(node, platform, false);
 
-    // Category Button Slider: различаем по свойству type или имени варианта
+    // Category Button Slider: тип random→заливка #1F1F1F, иначе без заливки
     if (nameIs(node, NAME_CAT_BTN)) {
-        const typeProp  = getInstanceProp(node, "type");
-        const fullName  = fullNodeName(node);
-        const isRandom  = (typeProp && typeProp.includes("random")) ||
-                          fullName.includes("random game");
+        const typeProp = getInstanceProp(node, "type");
+        const isRandom = (typeProp && typeProp.includes("random")) ||
+                         node.name.toLowerCase().includes("random");
         return buildCategoryBtn(node, platform, isRandom);
-    }
-
-    // Play & Win: стандартная рекурсия + принудительный строук #333333
-    if (nameIs(node, NAME_PLAY_WIN)) {
-        const result = await buildGenericContainer(node, platform);
-        if (result) {
-            result.strokes      = [{ type: "SOLID", color: C_STROKE }];
-            result.strokeWeight = 1;
-        }
-        return result;
     }
 
     if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
@@ -518,11 +497,6 @@ async function build(node, platform) {
         return buildLeaf(node, platform);
     }
 
-    return buildGenericContainer(node, platform);
-}
-
-// Стандартная сборка контейнера с Auto Layout из исходника.
-async function buildGenericContainer(node, platform) {
     const src   = node;
     const frame = figma.createFrame();
     frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
@@ -535,6 +509,12 @@ async function buildGenericContainer(node, platform) {
         frame.cornerRadius = src.cornerRadius;
     }
     if (hasStroke(node)) applyStroke(frame, node);
+
+    // Play & Win: дополнительно добавляем строук #333333
+    if (nameIs(node, NAME_PLAY_WIN)) {
+        frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
+        frame.strokeWeight = 1;
+    }
 
     const hasAL = applyAutoLayout(frame, src);
     frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;

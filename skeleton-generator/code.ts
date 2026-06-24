@@ -199,7 +199,7 @@ async function buildButton(node: SceneNode, platform: Platform, noFill = false):
   if ("cornerRadius" in node && typeof node.cornerRadius === "number") {
     frame.cornerRadius = node.cornerRadius;
   }
-  if (hasStroke(node)) applyStroke(frame, node);
+  if (!noFill && hasStroke(node)) applyStroke(frame, node);
   const hasAL = applyAutoLayout(frame, node);
   if (!hasAL) {
     frame.layoutMode            = "HORIZONTAL";
@@ -290,23 +290,6 @@ function buildLogo(node: SceneNode): RectangleNode {
 // ICON
 // ============================================================
 
-function getInstanceProp(node: SceneNode, propKey: string): string | null {
-  if (node.type !== "INSTANCE" || !node.componentProperties) return null;
-  for (const key of Object.keys(node.componentProperties)) {
-    if (key.toLowerCase().startsWith(propKey.toLowerCase())) {
-      return String(node.componentProperties[key].value).toLowerCase();
-    }
-  }
-  return null;
-}
-
-function fullNodeName(node: SceneNode): string {
-  if (node.type === "INSTANCE" && node.mainComponent) {
-    return (node.mainComponent.name || node.name).toLowerCase();
-  }
-  return node.name.toLowerCase();
-}
-
 function applyAutoLayout(frame: FrameNode, src: SceneNode): boolean {
   if (!("layoutMode" in src) || (src as FrameNode).layoutMode === "NONE") return false;
   const s = src as FrameNode;
@@ -321,6 +304,16 @@ function applyAutoLayout(frame: FrameNode, src: SceneNode): boolean {
   frame.paddingRight  = s.paddingRight  || 0;
   frame.itemSpacing   = s.itemSpacing   || 0;
   return true;
+}
+
+function getInstanceProp(node: SceneNode, propKey: string): string | null {
+  if (node.type !== "INSTANCE" || !node.componentProperties) return null;
+  for (const key of Object.keys(node.componentProperties)) {
+    if (key.toLowerCase().startsWith(propKey.toLowerCase())) {
+      return String(node.componentProperties[key].value).toLowerCase();
+    }
+  }
+  return null;
 }
 
 function snapIconSize(actual: number): number {
@@ -510,33 +503,6 @@ function detectPlatform(rootWidth: number): Platform {
   return rootWidth <= 480 ? "Mobile" : "Desktop";
 }
 
-async function buildGenericContainer(node: SceneNode, platform: Platform): Promise<FrameNode> {
-  const src   = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
-  const frame = figma.createFrame();
-  frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
-
-  const fills = await copyFills(node);
-  frame.fills = fills;
-  frame.name  = fills.length > 0 ? "Skeleton/Surface/Container" : "Skeleton/Container";
-
-  if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
-    frame.cornerRadius = src.cornerRadius;
-  }
-  if (hasStroke(node)) applyStroke(frame, node);
-
-  const hasAL = applyAutoLayout(frame, src);
-  frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
-
-  for (const child of src.children) {
-    if (child.visible === false) continue;
-    const built = await build(child, platform);
-    if (built === null) continue;
-    frame.appendChild(built);
-    if (!hasAL) { built.x = child.x; built.y = child.y; }
-  }
-  return frame;
-}
-
 async function build(node: SceneNode, platform: Platform): Promise<SceneNode | null> {
   if (node.visible === false) return null;
 
@@ -553,15 +519,8 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   if (nameIs(node, NAME_CAT_BTN)) {
     const typeProp = getInstanceProp(node, "type");
     const isRandom = (typeProp && typeProp.includes("random")) ||
-                     fullNodeName(node).includes("random game");
+                     node.name.toLowerCase().includes("random");
     return buildCategoryBtn(node, platform, isRandom);
-  }
-
-  if (nameIs(node, NAME_PLAY_WIN)) {
-    const result = await buildGenericContainer(node, platform);
-    result.strokes      = [{ type: "SOLID", color: C_STROKE }];
-    result.strokeWeight = 1;
-    return result;
   }
 
   if (isIconScaleContainer(node)) return buildIconCircle(node.width, node.height);
@@ -570,7 +529,37 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
     return buildLeaf(node, platform);
   }
 
-  return buildGenericContainer(node, platform);
+  const src = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
+
+  const frame = figma.createFrame();
+  frame.resize(Math.max(src.width, 0.01), Math.max(src.height, 0.01));
+
+  const fills = await copyFills(node);
+  frame.fills = fills;
+  frame.name  = fills.length > 0 ? "Skeleton/Surface/Container" : "Skeleton/Container";
+
+  if ("cornerRadius" in src && typeof src.cornerRadius === "number") {
+    frame.cornerRadius = src.cornerRadius;
+  }
+  if (hasStroke(node)) applyStroke(frame, node);
+
+  if (nameIs(node, NAME_PLAY_WIN)) {
+    frame.strokes      = [{ type: "SOLID", color: C_STROKE }];
+    frame.strokeWeight = 1;
+  }
+
+  const hasAL = applyAutoLayout(frame, src);
+  frame.clipsContent = "clipsContent" in src ? src.clipsContent : true;
+
+  for (const child of src.children) {
+    if (child.visible === false) continue;
+    const built = await build(child, platform);
+    if (built === null) continue;
+    frame.appendChild(built);
+    if (!hasAL) { built.x = child.x; built.y = child.y; }
+  }
+
+  return frame;
 }
 
 // ============================================================
