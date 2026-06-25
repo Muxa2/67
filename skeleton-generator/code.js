@@ -21,6 +21,7 @@ const NAME_DIVIDER      = ["divider", "дивайдер", "separator", "dividers
 const NAME_LOGO_BADGE   = ["logo badge", "logo-badge", "logobadge"];
 const NAME_PAY_METHOD   = ["pay method logo", "pay-method-logo", "payment logo", "pay method"];
 const NAME_BUTTON       = ["button"];
+const NAME_BUTTON_SKIP  = ["button block", "button-block", "button group", "button container", "button wrapper", "button row", "button section"];
 const NAME_STATUS_BLOCK = ["status-block", "status block", "statusblock"];
 const NAME_LOGO         = ["logo"];
 const NAME_STORIES_CONTAINER = ["stories-container"];
@@ -502,7 +503,7 @@ async function build(node, platform) {
     if (nameIs(node, NAME_PAY_METHOD))     return buildPayMethod(node);
     if (nameIs(node, NAME_LOGO))           return buildLogo(node);
     if (nameIs(node, NAME_CAT_BTN_SLIDER)) return buildCatBtnSlider(node);
-    if (nameIs(node, NAME_BUTTON))         return buildButton(node);
+    if (!nameIs(node, NAME_BUTTON_SKIP) && nameIs(node, NAME_BUTTON)) return buildButton(node);
     if (nameIs(node, NAME_LINK))           return buildLink(node, platform);
     if (nameIs(node, NAME_STORIES_CONTAINER)) return buildStoriesContainer(node);
     if (nameIs(node, NAME_STORIES))           return buildStories(node);
