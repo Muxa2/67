@@ -528,83 +528,13 @@ async function build(node, platform) {
 
     const hasAL = applyAutoLayout(frame, src);
 
-    // Process children maintaining order; flush consecutive text nodes as one block
-    const children = src.children.filter(c => c.visible !== false && !isAbsolutePos(c));
-    let textRun = [];
-
-    async function flushTextRun() {
-        if (textRun.length === 0) return;
-        const nodes = textRun;
-        textRun = [];
-        if (nodes.length === 1) {
-            const built = await buildText(nodes[0], platform);
-            frame.appendChild(built);
-            if (hasAL) applyChildLayoutSizing(built, nodes[0]);
-            else { built.x = nodes[0].x; built.y = nodes[0].y; }
-        } else {
-            const w = hasAL ? src.width : Math.max(...nodes.map(c => c.width));
-            const built = buildTextGroup(nodes, w, platform);
-            frame.appendChild(built);
-            if (hasAL) {
-                try { built.layoutSizingHorizontal = "FILL"; } catch (_) {}
-            } else {
-                built.x = nodes[0].x;
-                built.y = nodes[0].y;
-            }
-        }
-    }
-
-    for (const child of children) {
-        if (child.type === "TEXT") {
-            textRun.push(child);
-        } else {
-            await flushTextRun();
-            const built = await build(child, platform);
-            if (built === null) continue;
-            frame.appendChild(built);
-            if (hasAL) applyChildLayoutSizing(built, child);
-            else { built.x = child.x; built.y = child.y; }
-        }
-    }
-    await flushTextRun();
-    return frame;
-}
-
-// ---------- TEXT GROUP ----------
-function buildTextGroup(textNodes, w, platform) {
-    const barCount = Math.min(textNodes.length, 3);
-    const bh  = smallBarH(platform);
-    const gap = barGap(platform);
-    const fill = { type: "SOLID", color: C_CONTENT };
-
-    if (barCount === 1) {
-        const rect = figma.createRectangle();
-        rect.name         = textNodes[0].name;
-        rect.resize(Math.max(w, 0.01), bh);
-        rect.cornerRadius = 16;
-        rect.fills        = [fill];
-        return rect;
-    }
-
-    const totalH = barCount * bh + (barCount - 1) * gap;
-    const frame  = figma.createFrame();
-    frame.name         = textNodes[0].name;
-    frame.resize(Math.max(w, 0.01), Math.max(totalH, 0.01));
-    frame.fills        = [];
-    frame.clipsContent = false;
-
-    for (let i = 0; i < barCount; i++) {
-        const bar  = figma.createRectangle();
-        bar.name   = textNodes[0].name;
-        const barW = barCount === 2
-            ? (i === 1 ? w * 0.58 : w)
-            : (i === 2 ? w * 0.58 : i === 1 ? w * 0.78 : w);
-        bar.resize(Math.max(barW, 0.01), bh);
-        bar.cornerRadius = 16;
-        bar.fills        = [fill];
-        frame.appendChild(bar);
-        bar.x = 0;
-        bar.y = i * (bh + gap);
+    for (const child of src.children) {
+        if (child.visible === false || isAbsolutePos(child)) continue;
+        const built = await build(child, platform);
+        if (built === null) continue;
+        frame.appendChild(built);
+        if (hasAL) applyChildLayoutSizing(built, child);
+        else { built.x = child.x; built.y = child.y; }
     }
     return frame;
 }
