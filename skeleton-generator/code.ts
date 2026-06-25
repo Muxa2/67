@@ -587,6 +587,12 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
     return buildLeaf(node, platform);
   }
 
+  // If ALL descendants are TEXT nodes — render as paragraph skeleton block
+  if (isAllTextDescendants(node)) {
+    const count = countTextDescendants(node);
+    return buildTextGroup(new Array(count).fill(null), node.width, platform);
+  }
+
   const src = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
 
   const frame = figma.createFrame();
@@ -611,6 +617,64 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
     else { built.x = child.x; built.y = child.y; }
   }
 
+  return frame;
+}
+
+// ============================================================
+// TEXT GROUP
+// ============================================================
+
+function isAllTextDescendants(node: SceneNode): boolean {
+  if (node.type === "TEXT") return true;
+  if (!("children" in node)) return false;
+  const vis = (node as ChildrenMixin).children.filter(c => c.visible !== false && !isAbsolutePos(c));
+  if (vis.length === 0) return false;
+  return vis.every(c => isAllTextDescendants(c));
+}
+
+function countTextDescendants(node: SceneNode): number {
+  if (node.type === "TEXT") return 1;
+  if (!("children" in node)) return 0;
+  return (node as ChildrenMixin).children
+    .filter(c => c.visible !== false && !isAbsolutePos(c))
+    .reduce((sum, c) => sum + countTextDescendants(c), 0);
+}
+
+function buildTextGroup(textNodes: unknown[], w: number, platform: Platform): SceneNode {
+  const barCount = Math.min(textNodes.length, 3);
+  const bh  = smallBarH(platform);
+  const gap = barGap(platform);
+  const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
+
+  if (barCount === 1) {
+    const rect = figma.createRectangle();
+    rect.name         = "text";
+    rect.resize(Math.max(w, 0.01), bh);
+    rect.cornerRadius = 16;
+    rect.fills        = [fill];
+    return rect;
+  }
+
+  const totalH = barCount * bh + (barCount - 1) * gap;
+  const frame  = figma.createFrame();
+  frame.name         = "text";
+  frame.resize(Math.max(w, 0.01), Math.max(totalH, 0.01));
+  frame.fills        = [];
+  frame.clipsContent = false;
+
+  for (let i = 0; i < barCount; i++) {
+    const bar  = figma.createRectangle();
+    bar.name   = "text";
+    const barW = barCount === 2
+      ? (i === 1 ? w * 0.58 : w)
+      : (i === 2 ? w * 0.58 : i === 1 ? w * 0.78 : w);
+    bar.resize(Math.max(barW, 0.01), bh);
+    bar.cornerRadius = 16;
+    bar.fills        = [fill];
+    frame.appendChild(bar);
+    bar.x = 0;
+    bar.y = i * (bh + gap);
+  }
   return frame;
 }
 
