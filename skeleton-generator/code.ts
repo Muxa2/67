@@ -590,7 +590,10 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   // If ALL descendants are TEXT nodes — render as paragraph skeleton block
   if (isAllTextDescendants(node)) {
     const count = countTextDescendants(node);
-    return buildTextGroup(new Array(count).fill(null), node.width, platform);
+    if (count > 1) {
+      return buildTextGroup(new Array(count).fill(null), node.width, platform);
+    }
+    // count === 1: fall through so buildText handles H2 detection correctly
   }
 
   const src = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
