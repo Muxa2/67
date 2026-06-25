@@ -602,77 +602,15 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
 
   const hasAL = applyAutoLayout(frame, src);
 
-  const visibleChildren = (src as ChildrenMixin).children.filter(c => c.visible !== false && !isAbsolutePos(c));
-  const textChildren    = visibleChildren.filter(c => c.type === "TEXT");
-  const nonTextChildren = visibleChildren.filter(c => c.type !== "TEXT");
-
-  if (textChildren.length > 1) {
-    for (const child of nonTextChildren) {
-      const built = await build(child, platform);
-      if (built === null) continue;
-      frame.appendChild(built);
-      if (hasAL) applyChildLayoutSizing(built, child);
-      else { built.x = child.x; built.y = child.y; }
-    }
-    const firstText = textChildren[0];
-    const groupW    = hasAL ? src.width : Math.max(...textChildren.map(c => c.width));
-    const built     = buildTextGroup(textChildren, groupW, platform);
+  for (const child of src.children) {
+    if (child.visible === false || isAbsolutePos(child)) continue;
+    const built = await build(child, platform);
+    if (built === null) continue;
     frame.appendChild(built);
-    if (hasAL) {
-      (built as any).layoutSizingHorizontal = "FILL";
-      (built as any).layoutSizingVertical   = "HUG";
-    } else {
-      built.x = firstText.x;
-      built.y = firstText.y;
-    }
-  } else {
-    for (const child of visibleChildren) {
-      const built = await build(child, platform);
-      if (built === null) continue;
-      frame.appendChild(built);
-      if (hasAL) applyChildLayoutSizing(built, child);
-      else { built.x = child.x; built.y = child.y; }
-    }
+    if (hasAL) applyChildLayoutSizing(built, child);
+    else { built.x = child.x; built.y = child.y; }
   }
 
-  return frame;
-}
-
-function buildTextGroup(textNodes: SceneNode[], w: number, platform: Platform): SceneNode {
-  const barCount = Math.min(textNodes.length, 3);
-  const bh  = smallBarH(platform);
-  const gap = barGap(platform);
-  const totalH = barCount * bh + (barCount - 1) * gap;
-  const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
-
-  if (barCount === 1) {
-    const rect = figma.createRectangle();
-    rect.name         = textNodes[0].name;
-    rect.resize(Math.max(w, 0.01), bh);
-    rect.cornerRadius = 16;
-    rect.fills        = [fill];
-    return rect;
-  }
-
-  const frame = figma.createFrame();
-  frame.name         = textNodes[0].name;
-  frame.resize(Math.max(w, 0.01), Math.max(totalH, 0.01));
-  frame.fills        = [];
-  frame.clipsContent = false;
-
-  for (let i = 0; i < barCount; i++) {
-    const bar  = figma.createRectangle();
-    bar.name   = textNodes[0].name;
-    const barW = barCount === 2
-      ? (i === 1 ? w * 0.58 : w)
-      : (i === 2 ? w * 0.58 : i === 1 ? w * 0.78 : w);
-    bar.resize(Math.max(barW, 0.01), bh);
-    bar.cornerRadius = 16;
-    bar.fills        = [fill];
-    frame.appendChild(bar);
-    bar.x = 0;
-    bar.y = i * (bh + gap);
-  }
   return frame;
 }
 
