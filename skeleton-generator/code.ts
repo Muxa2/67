@@ -602,32 +602,25 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
 
   const hasAL = applyAutoLayout(frame, src);
 
-  const children = (src as ChildrenMixin).children.filter(c => c.visible !== false && !isAbsolutePos(c));
-  let textRun: SceneNode[] = [];
+  const visibleChildren = (src as ChildrenMixin).children.filter(c => c.visible !== false && !isAbsolutePos(c));
+  const textChildren    = visibleChildren.filter(c => c.type === "TEXT");
+  const nonTextChildren = visibleChildren.filter(c => c.type !== "TEXT");
 
-  async function flushTextRun() {
-    if (textRun.length === 0) return;
-    const nodes = textRun;
-    textRun = [];
-    if (nodes.length === 1) {
-      const built = await buildText(nodes[0] as TextNode, platform);
+  if (textChildren.length > 1) {
+    for (const child of nonTextChildren) {
+      const built = await build(child, platform);
+      if (built === null) continue;
       frame.appendChild(built);
-      if (hasAL) applyChildLayoutSizing(built, nodes[0]);
-      else { built.x = nodes[0].x; built.y = nodes[0].y; }
-    } else {
-      const w = hasAL ? src.width : Math.max(...nodes.map(c => c.width));
-      const built = buildTextGroup(nodes, w, platform);
-      frame.appendChild(built);
-      if (hasAL) { try { (built as any).layoutSizingHorizontal = "FILL"; } catch (_) {} }
-      else { built.x = nodes[0].x; built.y = nodes[0].y; }
+      if (hasAL) applyChildLayoutSizing(built, child);
+      else { built.x = child.x; built.y = child.y; }
     }
-  }
-
-  for (const child of children) {
-    if (child.type === "TEXT") {
-      textRun.push(child);
-    } else {
-      await flushTextRun();
+    const w     = hasAL ? src.width : Math.max(...textChildren.map(c => c.width));
+    const built = buildTextGroup(textChildren, w, platform);
+    frame.appendChild(built);
+    if (hasAL) { try { (built as any).layoutSizingHorizontal = "FILL"; } catch (_) {} }
+    else { built.x = textChildren[0].x; built.y = textChildren[0].y; }
+  } else {
+    for (const child of visibleChildren) {
       const built = await build(child, platform);
       if (built === null) continue;
       frame.appendChild(built);
@@ -635,7 +628,6 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
       else { built.x = child.x; built.y = child.y; }
     }
   }
-  await flushTextRun();
 
   return frame;
 }

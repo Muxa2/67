@@ -528,37 +528,27 @@ async function build(node, platform) {
 
     const hasAL = applyAutoLayout(frame, src);
 
-    // Process children maintaining order; flush consecutive text nodes as one block
-    const children = src.children.filter(c => c.visible !== false && !isAbsolutePos(c));
-    let textRun = [];
+    const visibleChildren = src.children.filter(c => c.visible !== false && !isAbsolutePos(c));
+    const textChildren    = visibleChildren.filter(c => c.type === "TEXT");
+    const nonTextChildren = visibleChildren.filter(c => c.type !== "TEXT");
 
-    async function flushTextRun() {
-        if (textRun.length === 0) return;
-        const nodes = textRun;
-        textRun = [];
-        if (nodes.length === 1) {
-            const built = await buildText(nodes[0], platform);
+    if (textChildren.length > 1) {
+        // Render non-text children in original order
+        for (const child of nonTextChildren) {
+            const built = await build(child, platform);
+            if (built === null) continue;
             frame.appendChild(built);
-            if (hasAL) applyChildLayoutSizing(built, nodes[0]);
-            else { built.x = nodes[0].x; built.y = nodes[0].y; }
-        } else {
-            const w = hasAL ? src.width : Math.max(...nodes.map(c => c.width));
-            const built = buildTextGroup(nodes, w, platform);
-            frame.appendChild(built);
-            if (hasAL) {
-                try { built.layoutSizingHorizontal = "FILL"; } catch (_) {}
-            } else {
-                built.x = nodes[0].x;
-                built.y = nodes[0].y;
-            }
+            if (hasAL) applyChildLayoutSizing(built, child);
+            else { built.x = child.x; built.y = child.y; }
         }
-    }
-
-    for (const child of children) {
-        if (child.type === "TEXT") {
-            textRun.push(child);
-        } else {
-            await flushTextRun();
+        // Render all text as one paragraph block, inserted after non-text
+        const w     = hasAL ? src.width : Math.max(...textChildren.map(c => c.width));
+        const built = buildTextGroup(textChildren, w, platform);
+        frame.appendChild(built);
+        if (hasAL) { try { built.layoutSizingHorizontal = "FILL"; } catch (_) {} }
+        else { built.x = textChildren[0].x; built.y = textChildren[0].y; }
+    } else {
+        for (const child of visibleChildren) {
             const built = await build(child, platform);
             if (built === null) continue;
             frame.appendChild(built);
@@ -566,7 +556,6 @@ async function build(node, platform) {
             else { built.x = child.x; built.y = child.y; }
         }
     }
-    await flushTextRun();
     return frame;
 }
 
