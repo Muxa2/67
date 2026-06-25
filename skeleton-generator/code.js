@@ -529,33 +529,24 @@ async function build(node, platform) {
     const hasAL = applyAutoLayout(frame, src);
 
     const visibleChildren = src.children.filter(c => c.visible !== false && !isAbsolutePos(c));
+    const textChildren    = visibleChildren.filter(c => c.type === "TEXT");
+    const nonTextChildren = visibleChildren.filter(c => c.type !== "TEXT");
 
-    // "Text-like" = TEXT node OR a container whose all visible children are TEXT nodes
-    function isTextLike(node) {
-        if (node.type === "TEXT") return true;
-        if (!("children" in node)) return false;
-        const vis = node.children.filter(c => c.visible !== false && !isAbsolutePos(c));
-        return vis.length > 0 && vis.every(c => c.type === "TEXT");
-    }
-
-    const textLikeChildren = visibleChildren.filter(isTextLike);
-    const nonTextLikeChildren = visibleChildren.filter(c => !isTextLike(c));
-
-    if (textLikeChildren.length > 1) {
-        // Render non-text-like children normally
-        for (const child of nonTextLikeChildren) {
+    if (textChildren.length > 1) {
+        // Render non-text children in original order
+        for (const child of nonTextChildren) {
             const built = await build(child, platform);
             if (built === null) continue;
             frame.appendChild(built);
             if (hasAL) applyChildLayoutSizing(built, child);
             else { built.x = child.x; built.y = child.y; }
         }
-        // Render all text-like children as one paragraph block
-        const w     = hasAL ? src.width : Math.max(...textLikeChildren.map(c => c.width));
-        const built = buildTextGroup(textLikeChildren, w, platform);
+        // Render all text as one paragraph block, inserted after non-text
+        const w     = hasAL ? src.width : Math.max(...textChildren.map(c => c.width));
+        const built = buildTextGroup(textChildren, w, platform);
         frame.appendChild(built);
         if (hasAL) { try { built.layoutSizingHorizontal = "FILL"; } catch (_) {} }
-        else { built.x = textLikeChildren[0].x; built.y = textLikeChildren[0].y; }
+        else { built.x = textChildren[0].x; built.y = textChildren[0].y; }
     } else {
         for (const child of visibleChildren) {
             const built = await build(child, platform);

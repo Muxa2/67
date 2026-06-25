@@ -603,30 +603,22 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
   const hasAL = applyAutoLayout(frame, src);
 
   const visibleChildren = (src as ChildrenMixin).children.filter(c => c.visible !== false && !isAbsolutePos(c));
+  const textChildren    = visibleChildren.filter(c => c.type === "TEXT");
+  const nonTextChildren = visibleChildren.filter(c => c.type !== "TEXT");
 
-  function isTextLike(node: SceneNode): boolean {
-    if (node.type === "TEXT") return true;
-    if (!("children" in node)) return false;
-    const vis = (node as ChildrenMixin).children.filter(c => c.visible !== false && !isAbsolutePos(c));
-    return vis.length > 0 && vis.every(c => c.type === "TEXT");
-  }
-
-  const textLikeChildren    = visibleChildren.filter(isTextLike);
-  const nonTextLikeChildren = visibleChildren.filter(c => !isTextLike(c));
-
-  if (textLikeChildren.length > 1) {
-    for (const child of nonTextLikeChildren) {
+  if (textChildren.length > 1) {
+    for (const child of nonTextChildren) {
       const built = await build(child, platform);
       if (built === null) continue;
       frame.appendChild(built);
       if (hasAL) applyChildLayoutSizing(built, child);
       else { built.x = child.x; built.y = child.y; }
     }
-    const w     = hasAL ? src.width : Math.max(...textLikeChildren.map(c => c.width));
-    const built = buildTextGroup(textLikeChildren, w, platform);
+    const w     = hasAL ? src.width : Math.max(...textChildren.map(c => c.width));
+    const built = buildTextGroup(textChildren, w, platform);
     frame.appendChild(built);
     if (hasAL) { try { (built as any).layoutSizingHorizontal = "FILL"; } catch (_) {} }
-    else { built.x = textLikeChildren[0].x; built.y = textLikeChildren[0].y; }
+    else { built.x = textChildren[0].x; built.y = textChildren[0].y; }
   } else {
     for (const child of visibleChildren) {
       const built = await build(child, platform);
