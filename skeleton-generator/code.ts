@@ -587,13 +587,11 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
     return buildLeaf(node, platform);
   }
 
-  // If ALL descendants are TEXT nodes — render as paragraph skeleton block
   if (isAllTextDescendants(node)) {
     const count = countTextDescendants(node);
     if (count > 1) {
-      return buildTextGroup(new Array(count).fill(null), node.width, platform);
+      return buildTextGroup(count, node.width, platform);
     }
-    // count === 1: fall through so buildText handles H2 detection correctly
   }
 
   const src = node as FrameNode | InstanceNode | GroupNode | ComponentNode;
@@ -630,21 +628,23 @@ async function build(node: SceneNode, platform: Platform): Promise<SceneNode | n
 function isAllTextDescendants(node: SceneNode): boolean {
   if (node.type === "TEXT") return true;
   if (!("children" in node)) return false;
-  const vis = (node as ChildrenMixin).children.filter(c => c.visible !== false && !isAbsolutePos(c));
+  const vis = (node as ChildrenMixin).children.filter(
+    (c) => c.visible !== false && !isAbsolutePos(c)
+  );
   if (vis.length === 0) return false;
-  return vis.every(c => isAllTextDescendants(c));
+  return vis.every((c) => isAllTextDescendants(c));
 }
 
 function countTextDescendants(node: SceneNode): number {
   if (node.type === "TEXT") return 1;
   if (!("children" in node)) return 0;
   return (node as ChildrenMixin).children
-    .filter(c => c.visible !== false && !isAbsolutePos(c))
+    .filter((c) => c.visible !== false && !isAbsolutePos(c))
     .reduce((sum, c) => sum + countTextDescendants(c), 0);
 }
 
-function buildTextGroup(textNodes: unknown[], w: number, platform: Platform): SceneNode {
-  const barCount = Math.min(textNodes.length, 3);
+function buildTextGroup(count: number, w: number, platform: Platform): SceneNode {
+  const barCount = Math.min(count, 3);
   const bh  = smallBarH(platform);
   const gap = barGap(platform);
   const fill: SolidPaint = { type: "SOLID", color: C_CONTENT };
@@ -695,12 +695,10 @@ figma.ui.onmessage = async (msg) => {
   }
 
   const placed: SceneNode[] = [];
-
   for (const source of selection) {
     const platform = detectPlatform(source.width);
     const root     = await build(source, platform);
     if (!root) continue;
-
     figma.currentPage.appendChild(root);
     const box = source.absoluteBoundingBox;
     if (box) { root.x = box.x + box.width + 80; root.y = box.y; }
