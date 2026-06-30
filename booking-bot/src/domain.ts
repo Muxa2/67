@@ -16,6 +16,23 @@ export function isSport(value: string): value is Sport {
   return (SPORTS as string[]).includes(value);
 }
 
+// Короткие подписи для автоназвания кортов в админке.
+export const SPORT_SHORT: Record<Sport, string> = {
+  tennis: "Корт",
+  padel: "Падел-корт",
+  football: "Поле",
+  volleyball: "Зал",
+};
+
+// Дефолты для быстрого добавления корта в один тап: владельцу не нужно
+// сразу заполнять покрытие и цену — они подставляются и правятся позже.
+export const SPORT_DEFAULTS: Record<Sport, { surface: string; price: number }> = {
+  tennis: { surface: "Хард", price: 2500 },
+  padel: { surface: "Стекло/искусств.", price: 3000 },
+  football: { surface: "Искусств. газон", price: 5000 },
+  volleyball: { surface: "Паркет", price: 3200 },
+};
+
 // Часы работы площадок (одинаковые для прототипа): слоты по 1 часу с 8:00 до 22:00.
 export const OPEN_HOUR = 8;
 export const CLOSE_HOUR = 22; // последний слот начинается в 21:00
@@ -32,6 +49,7 @@ export interface Venue {
   name: string;
   city: string;
   address: string;
+  owner_id: number; // Telegram-id владельца; 0 — демо-площадки из сида.
 }
 
 export interface Court {
@@ -50,15 +68,23 @@ export interface Booking {
   user_name: string;
   // start_iso — момент начала слота в формате YYYY-MM-DDTHH (локальное время площадки).
   start_iso: string;
+  kind: "booking" | "block";
+  reason: string | null;
   created_at: string;
 }
 
-// Слот = конкретный корт + конкретный час. Свободен, если на него нет брони.
+// Слот = конкретный корт + конкретный час.
+// Свободен, если не забронирован игроком и не заблокирован владельцем.
 export interface Slot {
   court: Court;
   start_iso: string;
   hour: number;
   isBooked: boolean;
+  isBlocked: boolean;
+}
+
+export function isSlotFree(s: Slot): boolean {
+  return !s.isBooked && !s.isBlocked;
 }
 
 export function formatPrice(rub: number): string {

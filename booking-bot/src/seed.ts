@@ -14,16 +14,19 @@ export function seed(store: BookingStore, force = false): void {
     name: "Спорт-Арена Центр",
     city: "Москва",
     address: "ул. Спортивная, 1",
+    owner_id: 0,
   });
   const park = store.insertVenue({
     name: "Парк-Клуб Север",
     city: "Москва",
     address: "Северный бульвар, 14",
+    owner_id: 0,
   });
   const river = store.insertVenue({
     name: "Ривер Падел",
     city: "Санкт-Петербург",
     address: "наб. Реки, 7",
+    owner_id: 0,
   });
 
   // Спорт-Арена Центр: теннис + волейбол

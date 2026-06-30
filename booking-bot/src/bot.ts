@@ -12,13 +12,18 @@ import {
   availableDates,
   formatDateLabel,
   formatPrice,
+  isSlotFree,
   isSport,
   parseSlotKey,
   toDateString,
 } from "./domain";
+import { registerOwnerHandlers } from "./owner";
 
 export function createBot(token: string, store: BookingStore): Bot {
   const bot = new Bot(token);
+
+  // Сторона владельца площадки (/owner и связанные экраны).
+  registerOwnerHandlers(bot, store);
 
   // --- Экраны -------------------------------------------------------------
 
@@ -42,6 +47,7 @@ export function createBot(token: string, store: BookingStore): Bot {
       "Команды:\n" +
         "/start — выбрать спорт и забронировать слот\n" +
         "/mybookings — мои брони и отмена\n" +
+        "/owner — кабинет владельца площадки\n" +
         "/help — эта справка",
     );
   });
@@ -125,7 +131,7 @@ export function createBot(token: string, store: BookingStore): Bot {
     const now = new Date();
     for (const { court, slots: courtSlots } of byCourt) {
       const free = courtSlots.filter(
-        (s) => !s.isBooked && !isPast(s.start_iso, now),
+        (s) => isSlotFree(s) && !isPast(s.start_iso, now),
       );
       lines.push(`🏟 ${court.name} · ${court.surface} · ${formatPrice(court.price_per_hour)}`);
       if (free.length === 0) {
